@@ -47,13 +47,54 @@ We built **Open Deep Wide Research** to be that solution, providing one agent fo
 
 **Example Scenarios:**
 
-| Scenario | Settings | Use Case | Time | Cost |
-|:---------|:---------|:---------|:----:|:----:|
-| 💬 **Quick Chat** | Deep: `███░░░░░░░░░` 25%<br/>Wide: `███░░░░░░░░░` 25% | Fast Q&A | ~5-10s | $0.01-0.02 |
-| 📊 **Deep Analysis** | Deep: `████████████` 100%<br/>Wide: `███░░░░░░░░░` 25% | Technical deep dive | ~1-2min | $0.08-0.12 |
-| 🔍 **Wide Survey** | Deep: `███░░░░░░░░░` 25%<br/>Wide: `████████████` 100% | Broad market research | ~30-60s | $0.05-0.10 |
-| ⚖️ **Balanced Research** | Deep: `██████░░░░░░` 50%<br/>Wide: `██████░░░░░░` 50% | General research | ~1-2min | $0.06-0.10 |
-| 🎯 **Ultra Deep Dive** | Deep: `████████████` 100%<br/>Wide: `████████████` 100% | Maximum depth & breadth | ~5min | $0.15-0.50 |
+<table>
+<thead>
+<tr>
+<th align="left"><sub>Scenario</sub></th>
+<th align="left"><sub>Settings</sub></th>
+<th align="left"><sub>Use Case</sub></th>
+<th align="center"><sub>Time</sub></th>
+<th align="center"><sub>Cost</sub></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left"><sub><b>Quick Chat</b></sub></td>
+<td align="left"><sub>Deep: <code>███░░░░░░░░░</code> 25%<br/>Wide: <code>███░░░░░░░░░</code> 25%</sub></td>
+<td align="left"><sub>Fast Q&A</sub></td>
+<td align="center"><sub>~5-10s</sub></td>
+<td align="center"><sub>$0.01-0.02</sub></td>
+</tr>
+<tr>
+<td align="left"><sub><b>Deep Analysis</b></sub></td>
+<td align="left"><sub>Deep: <code>████████████</code> 100%<br/>Wide: <code>███░░░░░░░░░</code> 25%</sub></td>
+<td align="left"><sub>Technical deep dive</sub></td>
+<td align="center"><sub>~1-2min</sub></td>
+<td align="center"><sub>$0.08-0.12</sub></td>
+</tr>
+<tr>
+<td align="left"><sub><b>Wide Survey</b></sub></td>
+<td align="left"><sub>Deep: <code>███░░░░░░░░░</code> 25%<br/>Wide: <code>████████████</code> 100%</sub></td>
+<td align="left"><sub>Broad market research</sub></td>
+<td align="center"><sub>~30-60s</sub></td>
+<td align="center"><sub>$0.05-0.10</sub></td>
+</tr>
+<tr>
+<td align="left"><sub><b>Balanced Research</b></sub></td>
+<td align="left"><sub>Deep: <code>██████░░░░░░</code> 50%<br/>Wide: <code>██████░░░░░░</code> 50%</sub></td>
+<td align="left"><sub>General research</sub></td>
+<td align="center"><sub>~1-2min</sub></td>
+<td align="center"><sub>$0.06-0.10</sub></td>
+</tr>
+<tr>
+<td align="left"><sub><b>Ultra Deep Dive</b></sub></td>
+<td align="left"><sub>Deep: <code>████████████</code> 100%<br/>Wide: <code>████████████</code> 100%</sub></td>
+<td align="left"><sub>Maximum depth & breadth</sub></td>
+<td align="center"><sub>~5min</sub></td>
+<td align="center"><sub>$0.15-0.50</sub></td>
+</tr>
+</tbody>
+</table>
 
 > If this mission resonates with you, please give us a star ⭐ and fork it! 🤞
 
@@ -71,22 +112,104 @@ We built **Open Deep Wide Research** to be that solution, providing one agent fo
 
 ## How We Compare
 
-<div style="width: 100%; overflow-x: auto; font-size: 12px;">
+<table>
+<thead>
+<tr>
+<th align="left"><sub>Feature</sub></th>
+<th align="center"><sub><img src="asserts/DWResearch.png" alt="Open Deep Wide Research" width="40" /><br/>Open<br/>Deep Wide<br/>Research</sub></th>
+<th align="center"><sub><img src="chat_interface/public/openai.jpg" alt="OpenAI" width="32" /><br/>OpenAI<br/>Deep Research</sub></th>
+<th align="center"><sub><img src="chat_interface/public/genmini.jpg" alt="Gemini" width="32" /><br/>Gemini<br/>Deep Research</sub></th>
+<th align="center"><sub><img src="chat_interface/public/manus.png" alt="Manus" width="28" /><br/>Manus<br/>Wide Research</sub></th>
+<th align="center"><sub><img src="chat_interface/public/genspark.jpg" alt="GenSpark" width="40" /><br/>GenSpark<br/>Deep Research</sub></th>
+<th align="center"><sub><img src="chat_interface/public/jina.jpg" alt="Jina" width="40" /><br/>Jina<br/>DeepSearch</sub></th>
+<th align="center"><sub><img src="chat_interface/public/langchain.png" alt="LangChain" width="40" /><br/>LangChain<br/>Open Deep Research</sub></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left"><sub><b>Depth × width controls</b></sub></td>
+<td align="center"><sub>D x W</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>W</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>D</sub></td>
+<td align="center"><sub>×</sub></td>
+</tr>
+<tr>
+<td align="left"><sub><b>Open source</b></sub></td>
+<td align="center"><sub>✅</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>✅</sub></td>
+<td align="center"><sub>✅</sub></td>
+</tr>
+<tr>
+<td align="left"><sub><b>MCP support</b></sub></td>
+<td align="center"><sub>✅</sub></td>
+<td align="center"><sub>✅</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>✅</sub></td>
+<td align="center"><sub>×</sub></td>
+</tr>
+<tr>
+<td align="left"><sub><b>SDK / API</b></sub></td>
+<td align="center"><sub>✅</sub></td>
+<td align="center"><sub>✅</sub></td>
+<td align="center"><sub>✅</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>✅</sub></td>
+<td align="center"><sub>✅</sub></td>
+</tr>
+<tr>
+<td align="left"><sub><b>Local knowledge</b></sub></td>
+<td align="center"><sub>✅</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>✅</sub></td>
+<td align="center"><sub>✅</sub></td>
+</tr>
+<tr>
+<td align="left"><sub><b>Model flexibility</b></sub></td>
+<td align="center"><sub>✅</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>✅</sub></td>
+</tr>
+<tr>
+<td align="left"><sub><b>Search engine flexibility</b></sub></td>
+<td align="center"><sub>✅</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>×</sub></td>
+<td align="center"><sub>×</sub></td>
+</tr>
+<tr>
+<td align="left"><sub><b>Performance</b></sub></td>
+<td align="center"><sub>5</sub></td>
+<td align="center"><sub>5</sub></td>
+<td align="center"><sub>4</sub></td>
+<td align="center"><sub>3</sub></td>
+<td align="center"><sub>4</sub></td>
+<td align="center"><sub>4</sub></td>
+<td align="center"><sub>3</sub></td>
+</tr>
+</tbody>
+</table>
 
-| Feature | <p align="center"><img src="asserts/DWResearch.png" alt="Open Deep Wide Research" width="40" /><br/>Open<br/>Deep Wide<br/>Research</p> | <p align="center"><img src="chat_interface/public/openai.jpg" alt="OpenAI" width="32" /><br/>OpenAI<br/>Deep Research</p> | <p align="center"><img src="chat_interface/public/genmini.jpg" alt="Gemini" width="32" /><br/>Gemini<br/>Deep Research</p> | <p align="center"><img src="chat_interface/public/manus.png" alt="Manus" width="28" /><br/>Manus  <br/> Wide Research</p> | <p align="center"><img src="chat_interface/public/genspark.jpg" alt="GenSpark" width="40" /><br/>GenSpark<br/>Deep Research</p> | <p align="center"><img src="chat_interface/public/jina.jpg" alt="Jina" width="40" /><br/>Jina<br/>DeepSearch</p> | <p align="center"><img src="chat_interface/public/langchain.png" alt="LangChain" width="40" /><br/>LangChain<br/>Open Deep Research</p> |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
-| **Depth × width controls** | D x W | × | × | W | × | D | × |
-| **Open source** | ✅ | × | × | × | × | ✅ | ✅ |
-| **MCP support** | ✅ | ✅ | × | × | × | ✅ | × |
-| **SDK / API** | ✅ | ✅ | ✅ | × | × | ✅ | ✅ |
-| **Local knowledge** | ✅ | × | × | × | × | ✅ | ✅ |
-| **Model flexibility** | ✅ | × | × | × | × | × | ✅ |
-| **Search engine flexibility**| ✅ | × | × | × | × | × | × |
-| **Performance** | 5 | 5 | 4 | 3 | 4 | 4 | 3 |
-
-</div>
-
-*Names are trademarks of their owners; descriptions are generalized and may change.*
+<sub><i>Names are trademarks of their owners; descriptions are generalized and may change.</i></sub>
 
 
 ## Get Started
