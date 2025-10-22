@@ -5,8 +5,8 @@
 <h1 align="center">Open Deep Wide Research</h1>
 
 <p align="center">
-  <a href="https://www.puppyagent.com" target="_blank">
-    <img src="https://img.shields.io/badge/Web-puppyagent.com-39BC66?style=flat&logo=google-chrome&logoColor=white" alt="Homepage" height="22" />
+  <a href="https://www.deepwideresearch.com" target="_blank">
+    <img src="https://img.shields.io/badge/Web-deepwideresearch.com-39BC66?style=flat&logo=google-chrome&logoColor=white" alt="Homepage" height="22" />
   </a>
   <a href="https://x.com/PuppyAgentTech" target="_blank">
     <img src="https://img.shields.io/badge/X-@PuppyAgentTech-000000?style=flat&logo=x&logoColor=white" alt="X (Twitter)" height="22" />
@@ -292,7 +292,7 @@ docker-compose up -d
 ### Deep Wide Research Archietecture
 
 <p align="center">
-  <img src="chat_interface/public/archietecture.png" alt="Deep & Wide Research Architecture" width="960" />
+  <img src="chat_interface/public/archietecture.svg" alt="Deep & Wide Research Architecture" width="960" />
 </p>
 
 ---
