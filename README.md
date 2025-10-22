@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  Build any agentic RAG with depth x width
+  Build any agentic RAG with depth & width
 </p>
 
 <p align="center">
@@ -63,35 +63,35 @@ We built **Open Deep Wide Research** to be that solution, providing one agent fo
 <td align="left"><sub>Deep: <code>███░░░░░░░░░</code> 25%<br/>Wide: <code>███░░░░░░░░░</code> 25%</sub></td>
 <td align="left"><sub>Fast Q&A</sub></td>
 <td align="center"><sub>~5-10s</sub></td>
-<td align="center"><sub>$0.01-0.02</sub></td>
+<td align="center"><sub>$0.05</sub></td>
 </tr>
 <tr>
 <td align="left"><sub><b>Deep Analysis</b></sub></td>
 <td align="left"><sub>Deep: <code>████████████</code> 100%<br/>Wide: <code>███░░░░░░░░░</code> 25%</sub></td>
 <td align="left"><sub>Technical deep dive</sub></td>
 <td align="center"><sub>~1-2min</sub></td>
-<td align="center"><sub>$0.08-0.12</sub></td>
+<td align="center"><sub>$0.30-0.50</sub></td>
 </tr>
 <tr>
 <td align="left"><sub><b>Wide Survey</b></sub></td>
 <td align="left"><sub>Deep: <code>███░░░░░░░░░</code> 25%<br/>Wide: <code>████████████</code> 100%</sub></td>
 <td align="left"><sub>Broad market research</sub></td>
 <td align="center"><sub>~30-60s</sub></td>
-<td align="center"><sub>$0.05-0.10</sub></td>
+<td align="center"><sub>$0.20-0.40</sub></td>
 </tr>
 <tr>
 <td align="left"><sub><b>Balanced Research</b></sub></td>
 <td align="left"><sub>Deep: <code>██████░░░░░░</code> 50%<br/>Wide: <code>██████░░░░░░</code> 50%</sub></td>
 <td align="left"><sub>General research</sub></td>
 <td align="center"><sub>~1-2min</sub></td>
-<td align="center"><sub>$0.06-0.10</sub></td>
+<td align="center"><sub>$0.30-0.60</sub></td>
 </tr>
 <tr>
 <td align="left"><sub><b>Ultra Deep Dive</b></sub></td>
 <td align="left"><sub>Deep: <code>████████████</code> 100%<br/>Wide: <code>████████████</code> 100%</sub></td>
 <td align="left"><sub>Maximum depth & breadth</sub></td>
 <td align="center"><sub>~5min</sub></td>
-<td align="center"><sub>$0.15-0.50</sub></td>
+<td align="center"><sub>$0.50-2.00</sub></td>
 </tr>
 </tbody>
 </table>
