@@ -27,6 +27,12 @@
 **/.venv/
 **/venv/
 **/ENV/
+**/bin/
+**/lib/
+**/lib64
+**/include/
+**/share/
+pyvenv.cfg
 
 ## Node / Next.js
 **/node_modules/
