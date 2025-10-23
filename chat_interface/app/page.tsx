@@ -52,6 +52,9 @@ export default function Home() {
   const [isCreatingSession, setIsCreatingSession] = useState(false)
   const [showCreateSuccess, setShowCreateSuccess] = useState(false)
   
+  // 📜 Cache streaming history for each session (session_id -> streamingHistory[])
+  const [sessionStreamingCache, setSessionStreamingCache] = useState<Record<string, string[]>>({})
+  
   // 🔑 Stable key for ChatMain component, avoid re-mounting when promoting temporary session
   const [chatComponentKey, setChatComponentKey] = useState<string>('default')
   
@@ -179,15 +182,38 @@ export default function Home() {
     // Get current session messages directly from chatHistory, avoid async issues with getCurrentMessages
     const currentMessages = currentSessionId ? (chatHistory[currentSessionId] || []) : []
     console.log('🔄 uiMessages recalculating, currentSessionId:', currentSessionId, 'messages:', currentMessages.length)
-    const result = currentMessages.map((m, idx) => ({
-      id: `${m.timestamp ?? idx}-${idx}`,
-      content: m.content,
-      sender: (m.role === 'assistant' ? 'bot' : 'user') as 'bot' | 'user',
-      timestamp: new Date(m.timestamp ?? Date.now())
-    }))
-    console.log('✅ uiMessages result:', result.length, 'messages')
+    
+    // Get cached streaming history for current session
+    const cachedHistory = currentSessionId ? sessionStreamingCache[currentSessionId] : undefined
+    
+    // Find the last assistant message index
+    let lastAssistantIdx = -1
+    for (let i = currentMessages.length - 1; i >= 0; i--) {
+      if (currentMessages[i].role === 'assistant') {
+        lastAssistantIdx = i
+        break
+      }
+    }
+    
+    const result = currentMessages.map((m, idx) => {
+      const baseMessage = {
+        id: `${m.timestamp ?? idx}-${idx}`,
+        content: m.content,
+        sender: (m.role === 'assistant' ? 'bot' : 'user') as 'bot' | 'user',
+        timestamp: new Date(m.timestamp ?? Date.now())
+      }
+      
+      // If it's the last assistant message and we have cached streaming history, attach it
+      if (m.role === 'assistant' && idx === lastAssistantIdx && cachedHistory && cachedHistory.length > 0) {
+        console.log('📜 Attaching cached history to last assistant message:', cachedHistory.length, 'steps')
+        return { ...baseMessage, streamingHistory: cachedHistory }
+      }
+      
+      return baseMessage
+    })
+    console.log('✅ uiMessages result:', result.length, 'messages', cachedHistory ? `with cached history (${cachedHistory.length} steps)` : '')
     return result
-  }, [chatHistory, currentSessionId]) // Depends on chatHistory and currentSessionId
+  }, [chatHistory, currentSessionId, sessionStreamingCache]) // Depends on chatHistory, currentSessionId, and sessionStreamingCache
 
   // Handle creating new chat
   const handleCreateNewChat = async () => {
@@ -354,6 +380,15 @@ export default function Home() {
       // ✅ Add assistant reply to Context
       const assistantMessage: ChatMessage = { role: 'assistant', content: finalReport || statusHistory[statusHistory.length - 1] || '', timestamp: Date.now() }
       addMessage(targetSessionId, assistantMessage)
+      
+      // 📜 Cache the streaming history for this session
+      if (statusHistory.length > 0) {
+        setSessionStreamingCache(prev => ({
+          ...prev,
+          [targetSessionId]: statusHistory
+        }))
+        console.log('📜 Cached streaming history for session:', targetSessionId, 'steps:', statusHistory.length)
+      }
       
       // ✅ Save to backend
       const completeHistory = [...localHistoryBefore, assistantMessage]

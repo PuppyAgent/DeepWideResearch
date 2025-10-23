@@ -29,6 +29,8 @@ export interface BotMessageProps {
 export default function BotMessage({ message, showAvatar = true, isTyping = false, streamingStatus, streamingHistory = [], isStreaming = false }: BotMessageProps) {
   const [isHovered, setIsHovered] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [hoveredUrl, setHoveredUrl] = useState<string | null>(null)
+  const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
 
   useEffect(() => {
     StyleManager.inject('puppychat-animations', `
@@ -43,6 +45,10 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
       @keyframes fadeInOut {
         0%, 100% { opacity: 0.8; }
         50% { opacity: 1; }
+      }
+      @keyframes breathe {
+        0%, 100% { transform: scale(1); opacity: 0.6; }
+        50% { transform: scale(1.3); opacity: 1; }
       }
     `)
     
@@ -63,12 +69,40 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
         vertical-align: middle;
         line-height: 1;
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: all 0.3s ease;
       }
       .citation-reference:hover {
-        background: #5aa0f2;
+        background: #FFA73D;
         color: #ffffff;
-        transform: scale(1.1);
+        transform: scale(1.15);
+        box-shadow: 0 2px 8px rgba(255, 167, 61, 0.4);
+      }
+      .link-tooltip {
+        position: fixed;
+        z-index: 10000;
+        background: #1a1a1a;
+        border: 1px solid #3a3a3a;
+        border-radius: 8px;
+        padding: 10px 12px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+        pointer-events: none;
+        max-width: 400px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .link-tooltip .favicon {
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+        border-radius: 4px;
+      }
+      .link-tooltip .url-text {
+        font-size: 13px;
+        color: #d2d2d2;
+        word-break: break-all;
+        line-height: 1.4;
+        flex: 1;
       }
     `)
   }, [])
@@ -91,6 +125,31 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     } catch {}
+  }
+
+  const handleLinkHover = (url: string, event: React.MouseEvent) => {
+    setHoveredUrl(url)
+    // Position tooltip relative to the link element
+    const target = event.currentTarget as HTMLElement
+    const rect = target.getBoundingClientRect()
+    // Position below the link with some offset
+    const x = rect.left
+    const y = rect.bottom + 8
+    setTooltipPosition({ x, y })
+  }
+
+  const handleLinkLeave = () => {
+    setHoveredUrl(null)
+  }
+
+  // Extract domain from URL for favicon
+  const getFaviconUrl = (url: string) => {
+    try {
+      const urlObj = new URL(url)
+      return `https://www.google.com/s2/favicons?domain=${urlObj.hostname}&sz=64`
+    } catch {
+      return null
+    }
   }
 
   const styles: { [key: string]: CSSProperties } = {
@@ -203,10 +262,19 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
     >
       <div style={styles.messageWrapper}>
         {isTyping ? (
-          <div style={styles.typingDots}>
-            <div style={{ ...styles.dot, animationDelay: '0s' }}></div>
-            <div style={{ ...styles.dot, animationDelay: '0.3s' }}></div>
-            <div style={{ ...styles.dot, animationDelay: '0.6s' }}></div>
+          <div style={{
+            fontSize: '14px',
+            color: 'transparent',
+            padding: 0,
+            background: 'linear-gradient(90deg, #888 0%, #888 30%, #fff 50%, #888 70%, #888 100%)',
+            backgroundClip: 'text',
+            WebkitBackgroundClip: 'text',
+            backgroundSize: '200% 100%',
+            animation: 'textFlash 2s linear infinite',
+            transition: 'opacity 0.3s ease-in-out',
+            lineHeight: '1.6'
+          }}>
+            Preparing...
           </div>
         ) : (
           <>
@@ -240,13 +308,15 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
                       }}>
                         {/* 圆点 */}
                         <div style={{
-                          width: '12px',
-                          height: '12px',
+                          width: '14px',
+                          height: '14px',
                           borderRadius: '50%',
                           backgroundColor: isCompleted ? '#888' : 'transparent', // 实心灰色 vs 空心灰色
                           border: isCompleted ? 'none' : '2px solid #888',
                           flexShrink: 0,
-                          zIndex: 1
+                          zIndex: 1,
+                          animation: isCompleted ? 'none' : 'breathe 2s ease-in-out infinite',
+                          transformOrigin: 'center'
                         }} />
                         
                         {/* 连接线 - 除了最后一项都显示 */}
@@ -311,26 +381,7 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
                       return null
                     }
                     
-                    // Process children to enhance citation references
-                    const processChildren = (child: React.ReactNode): React.ReactNode => {
-                      if (typeof child === 'string') {
-                        const parts = child.split(/(\[\d+\])/g)
-                        return parts.map((part, i) => {
-                          const match = part.match(/^\[(\d+)\]$/)
-                          if (match) {
-                            return <span key={i} className="citation-reference">{match[1]}</span>
-                          }
-                          return part
-                        })
-                      }
-                      return child
-                    }
-                    
-                    const enhancedChildren = Array.isArray(children) 
-                      ? children.map(processChildren)
-                      : processChildren(children)
-                    
-                    return <p style={{ margin: '4px 0', lineHeight: '1.6', wordBreak: 'break-word', overflowWrap: 'break-word' }} {...props}>{enhancedChildren}</p>
+                    return <p style={{ margin: '4px 0', lineHeight: '1.6', wordBreak: 'break-word', overflowWrap: 'break-word' }} {...props}>{children}</p>
                   },
                   h1: ({ ...props }) => (<div role="heading" aria-level={1} style={styles.h1} {...props} />),
                   h2: ({ ...props }) => (<div role="heading" aria-level={2} style={styles.h2} {...props} />),
@@ -339,17 +390,48 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
                   ol: ({ ...props }) => (<ol style={{ margin: '4px 0', paddingLeft: '20px' }} {...props} />),
                   li: ({ ...props }) => (<li style={{ margin: '2px 0' }} {...props} />),
                   br: () => null,  // 忽略单独的 <br> 标签，避免额外空行
-                  a: ({ href, children, ...props }) => (
-                    <a
-                      href={href}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={styles.link}
-                      {...props}
-                    >
-                      {children}
-                    </a>
-                  ),
+                  a: ({ href, children, ...props }) => {
+                    // Check if this is a citation link (text is just a number)
+                    const childText = typeof children === 'string' ? children : 
+                                     (Array.isArray(children) && children.length === 1 && typeof children[0] === 'string') ? children[0] : null
+                    
+                    const isCitation = childText && /^\d+$/.test(childText.trim())
+                    
+                    if (isCitation) {
+                      // Render as a circular citation badge
+                      return (
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="citation-reference"
+                          style={{
+                            textDecoration: 'none'
+                          }}
+                          onMouseEnter={(e) => href && handleLinkHover(href, e)}
+                          onMouseLeave={handleLinkLeave}
+                          {...props}
+                        >
+                          {childText}
+                        </a>
+                      )
+                    }
+                    
+                    // Regular link
+                    return (
+                      <a
+                        href={href}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={styles.link}
+                        onMouseEnter={(e) => href && handleLinkHover(href, e)}
+                        onMouseLeave={handleLinkLeave}
+                        {...props}
+                      >
+                        {children}
+                      </a>
+                    )
+                  },
                   table: ({ ...props }) => (<table style={styles.table} {...props} />),
                   thead: ({ ...props }) => (<thead style={styles.thead} {...props} />),
                   tbody: ({ ...props }) => (<tbody {...props} />),
@@ -381,6 +463,26 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
               <Copy style={{ width: '14px', height: '14px' }} />
             )}
           </div>
+        </div>
+      )}
+
+      {/* Link Tooltip */}
+      {hoveredUrl && (
+        <div
+          className="link-tooltip"
+          style={{
+            left: `${tooltipPosition.x}px`,
+            top: `${tooltipPosition.y}px`,
+          }}
+        >
+          {getFaviconUrl(hoveredUrl) && (
+            <img 
+              src={getFaviconUrl(hoveredUrl) || ''} 
+              alt="favicon"
+              className="favicon"
+            />
+          )}
+          <div className="url-text">{hoveredUrl}</div>
         </div>
       )}
     </div>
