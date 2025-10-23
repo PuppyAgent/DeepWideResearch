@@ -14,6 +14,9 @@ RUN apt-get update && apt-get install -y \
 # Verify installations
 RUN python --version && node --version && npm --version
 
+# Pre-install MCP packages globally (to avoid npx download issues at runtime)
+RUN npm install -g tavily-mcp@latest exa-mcp-server@latest
+
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

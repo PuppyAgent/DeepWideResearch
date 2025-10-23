@@ -86,14 +86,14 @@ class MCPRegistry:
         """Load built-in MCP servers (Tavily, Exa)"""
         
         # Tavily MCP Server
-        # Always use npx (works both locally and on Railway with Node.js installed)
+        # Use npx with globally pre-installed packages (both local and cloud)
         tavily_api_key = os.getenv("TAVILY_API_KEY")
         if tavily_api_key:
             self.register(MCPServerConfig(
                 name="tavily",
                 transport_type="stdio",
                 command="npx",
-                args=["-y", "@tavily/mcp"],
+                args=["tavily-mcp"],  # No -y flag needed, package is pre-installed globally
                 env={"TAVILY_API_KEY": tavily_api_key},
                 description="Tavily search MCP server - powerful web search"
             ))
@@ -101,14 +101,14 @@ class MCPRegistry:
             print("⚠️  Tavily MCP server skipped: TAVILY_API_KEY not found")
         
         # Exa MCP Server
-        # Always use npx (works both locally and on Railway with Node.js installed)
+        # Use npx with globally pre-installed packages (both local and cloud)
         exa_api_key = os.getenv("EXA_API_KEY")
         if exa_api_key:
             self.register(MCPServerConfig(
                 name="exa",
                 transport_type="stdio",
                 command="npx",
-                args=["-y", "exa-mcp-server"],
+                args=["exa-mcp-server"],  # No -y flag needed, package is pre-installed globally
                 env={"EXA_API_KEY": exa_api_key},
                 description="Exa search MCP server - AI-powered web search"
             ))
