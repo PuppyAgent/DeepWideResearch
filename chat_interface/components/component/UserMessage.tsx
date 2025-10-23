@@ -61,9 +61,9 @@ export default function UserMessage({ message, showAvatar = true, showBorder = t
     messageWrapper: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', maxWidth: '85%' },
     bubble: { padding: '12px 16px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', position: 'relative', background: '#1e1e1e', color: '#dcdcdc', border: showBorder ? 'none' : 'none', cursor: 'default' },
     content: { fontSize: '16px', whiteSpace: 'normal', lineHeight: '1.5', margin: 0, textAlign: 'left' },
-    h1: { fontSize: '24px', fontWeight: 700, lineHeight: '1.6', margin: '24px 0 16px 0' },
-    h2: { fontSize: '20px', fontWeight: 700, lineHeight: '1.6', margin: '20px 0 12px 0' },
-    h3: { fontSize: '15px', fontWeight: 600, lineHeight: '1.6', margin: '12px 0 8px 0' },
+    h1: { fontSize: '24px', fontWeight: 700, lineHeight: '1.6', margin: '32px 0 16px 0' },
+    h2: { fontSize: '20px', fontWeight: 700, lineHeight: '1.6', margin: '24px 0 12px 0' },
+    h3: { fontSize: '15px', fontWeight: 600, lineHeight: '1.6', margin: '16px 0 8px 0' },
     table: { 
       borderCollapse: 'collapse', 
       width: '100%', 
@@ -121,7 +121,7 @@ export default function UserMessage({ message, showAvatar = true, showBorder = t
               <MarkdownRenderer
                 content={(message.content || '').replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n')}
                 componentsStyle={{
-                  p: { margin: '8px 0', lineHeight: '1.6' },
+                  p: { margin: '12px 0', lineHeight: '1.6' },
                   h1: styles.h1,
                   h2: styles.h2,
                   h3: styles.h3,

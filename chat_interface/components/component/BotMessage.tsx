@@ -71,31 +71,8 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
       }
     `)
     
-    // Inject citation styles
+    // Inject tooltip styles
     StyleManager.inject('citation-styles', `
-      .citation-reference {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        background: #4a90e2;
-        color: #ffffff;
-        font-size: 10px;
-        font-weight: 600;
-        width: 18px;
-        height: 18px;
-        border-radius: 50%;
-        margin: 0 2px;
-        vertical-align: middle;
-        line-height: 1;
-        cursor: pointer;
-        transition: all 0.3s ease;
-      }
-      .citation-reference:hover {
-        background: #FFA73D;
-        color: #ffffff;
-        transform: scale(1.15);
-        box-shadow: 0 2px 8px rgba(255, 167, 61, 0.4);
-      }
       .link-tooltip {
         position: fixed;
         z-index: 10000;
@@ -190,9 +167,9 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
       border: '1px solid rgba(255, 255, 255, 0.05)'  // 非常浅的边框，几乎看不见
     },
     content: { fontSize: '16px', color: '#d2d2d2', whiteSpace: 'normal', lineHeight: '1.6', margin: 0, textAlign: 'left', wordBreak: 'break-word', overflowWrap: 'break-word', width: '100%' },
-    h1: { fontSize: '24px', fontWeight: 700, lineHeight: '1.6', margin: '24px 0 16px 0' },
-    h2: { fontSize: '20px', fontWeight: 700, lineHeight: '1.6', margin: '20px 0 12px 0' },
-    h3: { fontSize: '17px', fontWeight: 600, lineHeight: '1.6', margin: '12px 0 8px 0' },
+    h1: { fontSize: '24px', fontWeight: 700, lineHeight: '1.6', margin: '32px 0 16px 0' },
+    h2: { fontSize: '20px', fontWeight: 700, lineHeight: '1.6', margin: '24px 0 12px 0' },
+    h3: { fontSize: '17px', fontWeight: 600, lineHeight: '1.6', margin: '16px 0 8px 0' },
     link: {
       color: '#4a90e2',
       textDecoration: 'underline',
@@ -383,7 +360,7 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
                 <MarkdownRenderer
                   content={(message.content || '').replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n')}
                   componentsStyle={{
-                    p: { margin: '8px 0', lineHeight: '1.6', wordBreak: 'break-word', overflowWrap: 'break-word' },
+                    p: { margin: '12px 0', lineHeight: '1.6', wordBreak: 'break-word', overflowWrap: 'break-word' },
                     h1: styles.h1,
                     h2: styles.h2,
                     h3: styles.h3,

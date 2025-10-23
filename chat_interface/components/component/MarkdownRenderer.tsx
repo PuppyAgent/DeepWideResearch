@@ -1,4 +1,4 @@
-import { CSSProperties } from 'react'
+import { CSSProperties, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
@@ -34,6 +34,36 @@ export default function MarkdownRenderer({
   onLinkLeave,
   onLinkMove
 }: MarkdownRendererProps) {
+  // Ensure citation badge styles exist globally
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    if (document.getElementById('citation-styles')) return
+    const style = document.createElement('style')
+    style.id = 'citation-styles'
+    style.textContent = `
+      .citation-reference {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #4a90e2;
+        color: #ffffff;
+        font-size: 10px;
+        font-weight: 600;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        margin: 0 2px;
+        vertical-align: middle;
+        line-height: 1;
+        cursor: pointer;
+        transition: none;
+        text-decoration: none;
+      }
+      .citation-reference:hover {}
+    `
+    document.head.appendChild(style)
+  }, [])
+
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm, remarkBreaks]}
@@ -48,20 +78,47 @@ export default function MarkdownRenderer({
         ul: ({ ...props }) => (<ul style={componentsStyle?.ul} {...props} />),
         ol: ({ ...props }) => (<ol style={componentsStyle?.ol} {...props} />),
         li: ({ ...props }) => (<li style={componentsStyle?.li} {...props} />),
-        a: ({ href, children, ...props }) => (
-          <a
-            href={href}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={componentsStyle?.link}
-            onMouseEnter={(e) => { if (href && onLinkEnter) onLinkEnter(href, e) }}
-            onMouseLeave={(e) => { if (onLinkLeave) onLinkLeave(e) }}
-            onMouseMove={(e) => { if (href && onLinkMove) onLinkMove(href, e) }}
-            {...props}
-          >
-            {children}
-          </a>
-        ),
+        a: ({ href, children, ...props }) => {
+          const text = typeof children === 'string'
+            ? children
+            : Array.isArray(children) && children.length === 1 && typeof children[0] === 'string'
+            ? children[0]
+            : null
+
+          const isCitation = !!text && /^\d+$/.test(text.trim())
+
+          if (isCitation) {
+            return (
+              <a
+                href={href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="citation-reference"
+                onMouseEnter={(e) => { if (href && onLinkEnter) onLinkEnter(href, e) }}
+                onMouseLeave={(e) => { if (onLinkLeave) onLinkLeave(e) }}
+                onMouseMove={(e) => { if (href && onLinkMove) onLinkMove(href, e) }}
+                {...props}
+              >
+                {text}
+              </a>
+            )
+          }
+
+          return (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={componentsStyle?.link}
+              onMouseEnter={(e) => { if (href && onLinkEnter) onLinkEnter(href, e) }}
+              onMouseLeave={(e) => { if (onLinkLeave) onLinkLeave(e) }}
+              onMouseMove={(e) => { if (href && onLinkMove) onLinkMove(href, e) }}
+              {...props}
+            >
+              {children}
+            </a>
+          )
+        },
         table: ({ ...props }) => (<table style={componentsStyle?.table} {...props} />),
         thead: ({ ...props }) => (<thead style={componentsStyle?.thead} {...props} />),
         tbody: ({ ...props }) => (<tbody {...props} />),
