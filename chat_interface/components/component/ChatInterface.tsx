@@ -116,6 +116,7 @@ export default function ChatInterface({
   const [isStreaming, setIsStreaming] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
   
   // Welcome message streaming effect
   const [displayedWelcome, setDisplayedWelcome] = useState('')
@@ -250,6 +251,133 @@ export default function ChatInterface({
       }
     `)
   }, [])
+
+  // Inject fade-at-edges styles for chat history area
+  useEffect(() => {
+    StyleManager.inject('puppychat-fade-edges', `
+      .puppychat-messages {
+        --fade-size: 32px;
+        /* smoother multi-stop easing: closer to edge = darker (more mask) */
+        -webkit-mask-image: linear-gradient(
+          to bottom,
+          rgba(0, 0, 0, 0) 0,
+          rgba(0, 0, 0, 0.1) calc(var(--fade-size) * 0.25),
+          rgba(0, 0, 0, 0.4) calc(var(--fade-size) * 0.55),
+          rgba(0, 0, 0, 0.75) calc(var(--fade-size) * 0.85),
+          rgba(0, 0, 0, 1) var(--fade-size),
+          rgba(0, 0, 0, 1) calc(100% - var(--fade-size)),
+          rgba(0, 0, 0, 0.75) calc(100% - (var(--fade-size) * 0.85)),
+          rgba(0, 0, 0, 0.4) calc(100% - (var(--fade-size) * 0.55)),
+          rgba(0, 0, 0, 0.1) calc(100% - (var(--fade-size) * 0.25)),
+          rgba(0, 0, 0, 0) 100%
+        );
+        mask-image: linear-gradient(
+          to bottom,
+          rgba(0, 0, 0, 0) 0,
+          rgba(0, 0, 0, 0.1) calc(var(--fade-size) * 0.25),
+          rgba(0, 0, 0, 0.4) calc(var(--fade-size) * 0.55),
+          rgba(0, 0, 0, 0.75) calc(var(--fade-size) * 0.85),
+          rgba(0, 0, 0, 1) var(--fade-size),
+          rgba(0, 0, 0, 1) calc(100% - var(--fade-size)),
+          rgba(0, 0, 0, 0.75) calc(100% - (var(--fade-size) * 0.85)),
+          rgba(0, 0, 0, 0.4) calc(100% - (var(--fade-size) * 0.55)),
+          rgba(0, 0, 0, 0.1) calc(100% - (var(--fade-size) * 0.25)),
+          rgba(0, 0, 0, 0) 100%
+        );
+      }
+
+      /* Only fade bottom when scrolled to top */
+      .puppychat-messages.fade-bottom-only {
+        -webkit-mask-image: linear-gradient(
+          to bottom,
+          rgba(0, 0, 0, 1) 0,
+          rgba(0, 0, 0, 1) calc(100% - var(--fade-size)),
+          rgba(0, 0, 0, 0.75) calc(100% - (var(--fade-size) * 0.85)),
+          rgba(0, 0, 0, 0.4) calc(100% - (var(--fade-size) * 0.55)),
+          rgba(0, 0, 0, 0.1) calc(100% - (var(--fade-size) * 0.25)),
+          rgba(0, 0, 0, 0) 100%
+        );
+        mask-image: linear-gradient(
+          to bottom,
+          rgba(0, 0, 0, 1) 0,
+          rgba(0, 0, 0, 1) calc(100% - var(--fade-size)),
+          rgba(0, 0, 0, 0.75) calc(100% - (var(--fade-size) * 0.85)),
+          rgba(0, 0, 0, 0.4) calc(100% - (var(--fade-size) * 0.55)),
+          rgba(0, 0, 0, 0.1) calc(100% - (var(--fade-size) * 0.25)),
+          rgba(0, 0, 0, 0) 100%
+        );
+      }
+
+      /* Only fade top when scrolled to bottom */
+      .puppychat-messages.fade-top-only {
+        -webkit-mask-image: linear-gradient(
+          to bottom,
+          rgba(0, 0, 0, 0) 0,
+          rgba(0, 0, 0, 0.1) calc(var(--fade-size) * 0.25),
+          rgba(0, 0, 0, 0.4) calc(var(--fade-size) * 0.55),
+          rgba(0, 0, 0, 0.75) calc(var(--fade-size) * 0.85),
+          rgba(0, 0, 0, 1) var(--fade-size),
+          rgba(0, 0, 0, 1) 100%
+        );
+        mask-image: linear-gradient(
+          to bottom,
+          rgba(0, 0, 0, 0) 0,
+          rgba(0, 0, 0, 0.1) calc(var(--fade-size) * 0.25),
+          rgba(0, 0, 0, 0.4) calc(var(--fade-size) * 0.55),
+          rgba(0, 0, 0, 0.75) calc(var(--fade-size) * 0.85),
+          rgba(0, 0, 0, 1) var(--fade-size),
+          rgba(0, 0, 0, 1) 100%
+        );
+      }
+
+      /* No fade when content doesn't overflow */
+      .puppychat-messages.fade-none {
+        -webkit-mask-image: none;
+        mask-image: none;
+      }
+    `)
+  }, [])
+
+  // Update fade classes based on scroll position and content size
+  useEffect(() => {
+    const el = messagesContainerRef.current
+    if (!el) return
+
+    const updateFade = () => {
+      const { scrollTop, scrollHeight, clientHeight } = el
+      const atTop = scrollTop <= 1
+      const atBottom = scrollTop + clientHeight >= scrollHeight - 1
+      const canScroll = scrollHeight > clientHeight + 1
+
+      el.classList.remove('fade-bottom-only', 'fade-top-only', 'fade-none')
+
+      if (!canScroll) {
+        el.classList.add('fade-none')
+        return
+      }
+
+      if (atTop && !atBottom) {
+        el.classList.add('fade-bottom-only')
+        return
+      }
+
+      if (atBottom && !atTop) {
+        el.classList.add('fade-top-only')
+        return
+      }
+
+      // in the middle: default both fades via base class
+    }
+
+    updateFade()
+    el.addEventListener('scroll', updateFade)
+    window.addEventListener('resize', updateFade)
+
+    return () => {
+      el.removeEventListener('scroll', updateFade)
+      window.removeEventListener('resize', updateFade)
+    }
+  }, [messages.length, isTyping, isStreaming])
 
   // Auto-adjust textarea height based on content (hug content)
   const autoResizeTextarea = () => {
@@ -685,7 +813,7 @@ export default function ChatInterface({
       )}
 
       {/* Messages */}
-      <div style={styles.messagesContainer} className="puppychat-messages">
+      <div ref={messagesContainerRef} style={styles.messagesContainer} className="puppychat-messages">
         {messages.map((message, index) => {
           // If it's the welcome message and we're streaming it, show the partial content
           const isWelcomeMessage = index === 0 && message.sender === 'bot' && messages.length === 1

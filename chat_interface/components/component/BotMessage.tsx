@@ -162,7 +162,7 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
       alignItems: 'flex-start', 
       width: '100%', 
       minWidth: 0,
-      padding: '12px 16px',
+      padding: '16px 20px',
       borderRadius: '16px',
       border: '1px solid rgba(255, 255, 255, 0.05)'  // 非常浅的边框，几乎看不见
     },
