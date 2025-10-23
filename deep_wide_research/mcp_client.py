@@ -93,7 +93,7 @@ class MCPRegistry:
                 name="tavily",
                 transport_type="stdio",
                 command="npx",
-                args=["-y", "tavily-mcp@0.1.3"],
+                args=["-y", "@tavily/mcp"],
                 env={"TAVILY_API_KEY": tavily_api_key},
                 description="Tavily search MCP server - powerful web search"
             ))
