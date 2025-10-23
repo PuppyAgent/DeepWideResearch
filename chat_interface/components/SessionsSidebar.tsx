@@ -75,7 +75,7 @@ export default function SessionsSidebar({
               }}
               title={s.title || 'Untitled'}
             >
-              <div className={`flex items-center justify-start min-h-[32px] text-left text-[12px] w-full font-plus-jakarta-sans font-medium ${isSelected ? 'text-[#e6e6e6]' : 'text-[#888]'} overflow-hidden`}>
+              <div className={`flex items-center justify-start min-h-[32px] text-left text-[14px] w-full font-plus-jakarta-sans font-medium ${isSelected ? 'text-[#e6e6e6]' : 'text-[#888]'} overflow-hidden`}>
                 <div className='flex items-center gap-[8px] max-w-[166px]'>
                   <span className='truncate'>{s.title || 'Untitled'}</span>
                 </div>

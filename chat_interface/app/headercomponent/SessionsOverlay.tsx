@@ -35,7 +35,7 @@ export default function SessionsOverlay({
       style={{
         position: 'absolute',
         top: '47px',
-        left: '0',
+        left: '32px',
         width: `${sidebarWidth}px`,
         maxHeight: '60vh',
         overflow: 'hidden',

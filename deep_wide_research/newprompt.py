@@ -354,17 +354,34 @@ For simple questions: Use inline links naturally [text](URL) if sources exist.
 For complex research:
 - Assign each URL a citation number [1], [2], etc.
 - End with ### Sources listing all sources sequentially
-- Format: [1] Source Title: URL
+- **CRITICAL**: Format sources as markdown links: `[1] [Source Title](URL)`
+- Each source entry must be a clickable markdown link to render properly in the frontend
 
-Citations are important when available, but never cite sources that don't exist.
+**IMPORTANT: Citation and Sources Format**
 
-**IMPORTANT: Citation Format**
+In-text citations:
 - The citation number MUST ALWAYS be enclosed in English square brackets [ ]
 - MUST have a space before and after the citation brackets
 - Use [1], [2], [3], etc. - NOT (1), NOT 【1】, NOT ［1］
-- Correct format: "According to recent studies [1] , the technology has advanced significantly [2] ."
-- Wrong format: "recent studies[1], technology[2]." (no spaces)
-- In the Sources section, also use [1], [2] format consistently
+- Correct: "According to recent studies [1] , the technology has advanced significantly [2] ."
+- Wrong: "recent studies[1], technology[2]." (no spaces)
+
+Sources section:
+- Use markdown link format for each reference to make it clickable in the frontend
+- Correct: `[1] [OpenAI GPT-4 Technical Report](https://openai.com/research/gpt-4)`
+- Correct: `[2] [Nature Article on AI Safety](https://nature.com/articles/ai-safety-2024)`
+- Wrong: `[1] OpenAI GPT-4 Technical Report: https://openai.com/research/gpt-4` (not clickable)
+- The source title MUST be wrapped in markdown link syntax [title](url)
+
+**Sources Section Example:**
+```
+### Sources
+[1] [OpenAI GPT-4 Technical Report](https://openai.com/research/gpt-4)
+[2] [Nature Article on AI Safety](https://nature.com/articles/ai-safety-2024)
+[3] [MIT Technology Review](https://technologyreview.com/ai-trends-2024)
+```
+
+Citations are important when available, but never cite sources that don't exist.
 
 
 """

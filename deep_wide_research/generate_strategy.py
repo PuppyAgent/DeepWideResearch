@@ -95,12 +95,23 @@ async def generate_report_stream(state: Dict, cfg, api_keys: Optional[dict] = No
     print(system_message["content"])
     print(user_payload["content"])
 
+    # Accumulate the complete report for final debug output
+    accumulated_report = ""
+    
     async for chunk in chat_complete_stream(
         cfg.final_report_model,
         [system_message, user_payload],
         cfg.final_report_model_max_tokens,
         api_keys,
     ):
+        accumulated_report += chunk
         yield chunk
+    
+    # Print the complete generated report for debugging
+    print("\n" + "="*80)
+    print("FINAL REPORT GENERATED:")
+    print("="*80)
+    print(accumulated_report)
+    print("="*80 + "\n")
 
 

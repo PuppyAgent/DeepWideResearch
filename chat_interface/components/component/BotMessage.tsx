@@ -94,12 +94,27 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
   }
 
   const styles: { [key: string]: CSSProperties } = {
-    container: { display: 'flex', alignItems: 'flex-start', gap: '0px', width: '100%', flexDirection: 'row' },
-    messageWrapper: { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', maxWidth: '85%', minWidth: 0 },
-    content: { fontSize: '14px', color: '#d2d2d2', whiteSpace: 'pre-wrap', lineHeight: '1.6', margin: 0, textAlign: 'left', wordBreak: 'break-word', overflowWrap: 'break-word', width: '100%' },
-    h1: { fontSize: '18px', fontWeight: 700, lineHeight: '1.6', margin: '0 0 8px 0' },
-    h2: { fontSize: '16px', fontWeight: 700, lineHeight: '1.6', margin: '0 0 6px 0' },
-    h3: { fontSize: '15px', fontWeight: 600, lineHeight: '1.6', margin: '0 0 4px 0' },
+    container: { 
+      display: 'flex', 
+      flexDirection: 'column',  // 改为垂直布局
+      alignItems: 'flex-start', 
+      gap: '0px', 
+      width: '100%'
+    },
+    messageWrapper: { 
+      display: 'flex', 
+      flexDirection: 'column', 
+      alignItems: 'flex-start', 
+      width: '100%', 
+      minWidth: 0,
+      padding: '12px 16px',
+      borderRadius: '16px',
+      border: '1px solid rgba(255, 255, 255, 0.05)'  // 非常浅的边框，几乎看不见
+    },
+    content: { fontSize: '16px', color: '#d2d2d2', whiteSpace: 'pre-wrap', lineHeight: '1.6', margin: 0, textAlign: 'left', wordBreak: 'break-word', overflowWrap: 'break-word', width: '100%' },
+    h1: { fontSize: '20px', fontWeight: 700, lineHeight: '1.6', margin: '0 0 6px 0' },
+    h2: { fontSize: '18px', fontWeight: 700, lineHeight: '1.6', margin: '0 0 4px 0' },
+    h3: { fontSize: '17px', fontWeight: 600, lineHeight: '1.6', margin: '0 0 3px 0' },
     link: {
       color: '#4a90e2',
       textDecoration: 'underline',
@@ -142,9 +157,18 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
     tr: { 
       borderBottom: '1px solid #2a2a2a'
     },
-    metaBar: { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', opacity: isHovered ? 0.6 : 0, transition: 'opacity 0.2s ease', justifyContent: 'flex-start' },
-    timestamp: { fontSize: '11px', color: '#a0a0a0' },
-    copyButton: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '18px', height: '18px', borderRadius: '4px', color: '#a0a0a0', cursor: 'pointer' },
+    metaBar: { 
+      display: 'flex', 
+      alignItems: 'center', 
+      gap: '8px', 
+      marginTop: '6px',  // 在消息框下方留一点间距
+      marginLeft: '4px',  // 稍微缩进对齐
+      opacity: isHovered ? 0.6 : 0, 
+      transition: 'opacity 0.2s ease', 
+      justifyContent: 'flex-start' 
+    },
+    timestamp: { fontSize: '14px', color: '#a0a0a0' },
+    copyButton: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', borderRadius: '4px', color: '#a0a0a0', cursor: 'pointer' },
     typingDots: { display: 'flex', alignItems: 'center', gap: '8px', height: '20px' },
     dot: { width: '8px', height: '8px', backgroundColor: '#4a90e2', borderRadius: '50%', animation: 'pulse 1s infinite' },
     statusStreaming: { 
@@ -160,7 +184,7 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
       transition: 'opacity 0.3s ease-in-out'
     },
     reportStreaming: {
-      fontSize: '14px',
+      fontSize: '16px',
       color: '#d2d2d2',
       lineHeight: '1.6',
       whiteSpace: 'pre-wrap',
@@ -172,12 +196,12 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
   }
 
   return (
-    <div style={styles.container}>
-      <div
-        style={styles.messageWrapper}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-      >
+    <div 
+      style={styles.container}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
+    >
+      <div style={styles.messageWrapper}>
         {isTyping ? (
           <div style={styles.typingDots}>
             <div style={{ ...styles.dot, animationDelay: '0s' }}></div>
@@ -279,8 +303,14 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
               <div style={isStreaming ? styles.reportStreaming : styles.content}>
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
+                  skipHtml={false}
                   components={{
                   p: ({ children, ...props }) => {
+                    // Skip empty paragraphs
+                    if (!children || (typeof children === 'string' && children.trim() === '')) {
+                      return null
+                    }
+                    
                     // Process children to enhance citation references
                     const processChildren = (child: React.ReactNode): React.ReactNode => {
                       if (typeof child === 'string') {
@@ -300,11 +330,15 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
                       ? children.map(processChildren)
                       : processChildren(children)
                     
-                    return <p style={{ margin: 0, lineHeight: '1.6', wordBreak: 'break-word', overflowWrap: 'break-word' }} {...props}>{enhancedChildren}</p>
+                    return <p style={{ margin: '4px 0', lineHeight: '1.6', wordBreak: 'break-word', overflowWrap: 'break-word' }} {...props}>{enhancedChildren}</p>
                   },
                   h1: ({ ...props }) => (<div role="heading" aria-level={1} style={styles.h1} {...props} />),
                   h2: ({ ...props }) => (<div role="heading" aria-level={2} style={styles.h2} {...props} />),
                   h3: ({ ...props }) => (<div role="heading" aria-level={3} style={styles.h3} {...props} />),
+                  ul: ({ ...props }) => (<ul style={{ margin: '4px 0', paddingLeft: '20px' }} {...props} />),
+                  ol: ({ ...props }) => (<ol style={{ margin: '4px 0', paddingLeft: '20px' }} {...props} />),
+                  li: ({ ...props }) => (<li style={{ margin: '2px 0' }} {...props} />),
+                  br: () => null,  // 忽略单独的 <br> 标签，避免额外空行
                   a: ({ href, children, ...props }) => (
                     <a
                       href={href}
@@ -330,24 +364,25 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
             )}
           </>
         )}
-
-        {!isTyping && (
-          <div style={styles.metaBar}>
-            <div style={styles.timestamp}>
-              {message.timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-            </div>
-            <div style={styles.copyButton} title={copied ? 'Copied' : 'Copy message'} onClick={handleCopy}>
-              {copied ? (
-                <div style={{ width: '18px', height: '18px', borderRadius: '50%', backgroundColor: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <Check style={{ width: '12px', height: '12px', color: '#000000' }} />
-                </div>
-              ) : (
-                <Copy style={{ width: '14px', height: '14px' }} />
-              )}
-            </div>
-          </div>
-        )}
       </div>
+
+      {/* Meta bar - 时间戳和复制按钮显示在消息框外面 */}
+      {!isTyping && (
+        <div style={styles.metaBar}>
+          <div style={styles.timestamp}>
+            {message.timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
+          </div>
+          <div style={styles.copyButton} title={copied ? 'Copied' : 'Copy message'} onClick={handleCopy}>
+            {copied ? (
+              <div style={{ width: '18px', height: '18px', borderRadius: '50%', backgroundColor: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Check style={{ width: '12px', height: '12px', color: '#000000' }} />
+              </div>
+            ) : (
+              <Copy style={{ width: '14px', height: '14px' }} />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

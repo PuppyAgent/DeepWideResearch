@@ -505,7 +505,7 @@ export default function ChatInterface({
     header: {
       display: showHeader ? 'flex' : 'none',
       color: 'white',
-      padding: '12px 16px',
+      padding: '12px 32px',
       borderTopLeftRadius: '16px',
       borderTopRightRadius: '16px',
       alignItems: 'center',
@@ -527,10 +527,10 @@ export default function ChatInterface({
       borderTopRightRadius: showHeader ? '0px' : '16px'
     },
     toolbarContainer: {
-      padding: '0 20px 0px 20px'
+      padding: '0 32px'
     },
     inputContainer: {
-      padding: '20px',
+      padding: '20px 32px',
       borderBottomLeftRadius: '16px',
       borderBottomRightRadius: '16px',
       backgroundColor: 'transparent'
@@ -560,20 +560,20 @@ export default function ChatInterface({
       padding: '8px',
       resize: 'none' as const,
       outline: 'none',
-      fontSize: '14px',
+      fontSize: '16px',
       lineHeight: '1.5',
       fontFamily: 'inherit',
       backgroundColor: 'transparent',
       color: '#e5e5e5',
       border: 'none',
-      minHeight: '28px',
+      minHeight: '40px',
       boxSizing: 'border-box' as const,
-      maxHeight: '180px',
+      maxHeight: '200px',
       overflowY: 'auto' as const
     },
     sendButton: {
-      width: '37px',
-      height: '37px',
+      width: '40px',
+      height: '40px',
       borderRadius: '50%',
       border: 'none',
       display: 'flex',

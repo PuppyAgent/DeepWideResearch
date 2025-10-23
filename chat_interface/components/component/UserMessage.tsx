@@ -60,8 +60,8 @@ export default function UserMessage({ message, showAvatar = true, showBorder = t
   const styles: { [key: string]: CSSProperties } = {
     container: { display: 'flex', alignItems: 'flex-start', gap: '0px', width: '100%', flexDirection: 'row-reverse' },
     messageWrapper: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', maxWidth: '85%' },
-    bubble: { padding: '12px 16px', borderRadius: '12px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', position: 'relative', background: '#1e1e1e', color: '#dcdcdc', border: showBorder ? 'none' : 'none', cursor: 'default' },
-    content: { fontSize: '14px', whiteSpace: 'pre-wrap', lineHeight: '1.5', margin: 0, textAlign: 'left' },
+    bubble: { padding: '12px 16px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', position: 'relative', background: '#1e1e1e', color: '#dcdcdc', border: showBorder ? 'none' : 'none', cursor: 'default' },
+    content: { fontSize: '16px', whiteSpace: 'pre-wrap', lineHeight: '1.5', margin: 0, textAlign: 'left' },
     h1: { fontSize: '18px', fontWeight: 700, lineHeight: '1.6', margin: '0 0 8px 0' },
     h2: { fontSize: '16px', fontWeight: 700, lineHeight: '1.6', margin: '0 0 6px 0' },
     h3: { fontSize: '15px', fontWeight: 600, lineHeight: '1.6', margin: '0 0 4px 0' },
@@ -96,8 +96,8 @@ export default function UserMessage({ message, showAvatar = true, showBorder = t
       borderBottom: '1px solid #2a2a2a'
     },
     metaBar: { display: 'flex', alignItems: 'center', gap: '8px', marginTop: '4px', opacity: isHovered ? 0.6 : 0, transition: 'opacity 0.2s ease', justifyContent: 'flex-end' },
-    timestamp: { fontSize: '11px', color: '#a0a0a0' },
-    copyButton: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '18px', height: '18px', borderRadius: '4px', color: '#a0a0a0', cursor: 'pointer' },
+    timestamp: { fontSize: '14px', color: '#a0a0a0' },
+    copyButton: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', borderRadius: '4px', color: '#a0a0a0', cursor: 'pointer' },
     typingDots: { display: 'flex', alignItems: 'center', gap: '8px', height: '20px' },
     dot: { width: '8px', height: '8px', backgroundColor: '#4a90e2', borderRadius: '50%', animation: 'pulse 1s infinite' }
   }
@@ -121,11 +121,22 @@ export default function UserMessage({ message, showAvatar = true, showBorder = t
             <div style={styles.content}>
               <ReactMarkdown
                 remarkPlugins={[remarkGfm]}
+                skipHtml={false}
                 components={{
-                  p: ({ ...props }) => (<p style={{ margin: 0, lineHeight: '1.6' }} {...props} />),
+                  p: ({ children, ...props }) => {
+                    // Skip empty paragraphs
+                    if (!children || (typeof children === 'string' && children.trim() === '')) {
+                      return null
+                    }
+                    return <p style={{ margin: '4px 0', lineHeight: '1.6' }} {...props}>{children}</p>
+                  },
                   h1: ({ ...props }) => (<div role="heading" aria-level={1} style={styles.h1} {...props} />),
                   h2: ({ ...props }) => (<div role="heading" aria-level={2} style={styles.h2} {...props} />),
                   h3: ({ ...props }) => (<div role="heading" aria-level={3} style={styles.h3} {...props} />),
+                  ul: ({ ...props }) => (<ul style={{ margin: '4px 0', paddingLeft: '20px' }} {...props} />),
+                  ol: ({ ...props }) => (<ol style={{ margin: '4px 0', paddingLeft: '20px' }} {...props} />),
+                  li: ({ ...props }) => (<li style={{ margin: '2px 0' }} {...props} />),
+                  br: () => null,  // 忽略单独的 <br> 标签，避免额外空行
                   table: ({ ...props }) => (<table style={styles.table} {...props} />),
                   thead: ({ ...props }) => (<thead style={styles.thead} {...props} />),
                   tbody: ({ ...props }) => (<tbody {...props} />),

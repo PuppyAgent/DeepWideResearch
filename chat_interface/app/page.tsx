@@ -438,7 +438,7 @@ export default function Home() {
               display: 'flex', 
               alignItems: 'center', 
               justifyContent: 'space-between', 
-              padding: '0 4px', 
+              padding: '0 32px', 
               position: 'relative',
               flexShrink: 0
             }}>
