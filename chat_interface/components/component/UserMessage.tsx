@@ -1,7 +1,6 @@
 import { Copy, Check } from 'lucide-react'
 import { CSSProperties, useState, useEffect } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import MarkdownRenderer from './MarkdownRenderer'
 import type { Message } from '../types'
 
 const StyleManager = {
@@ -61,10 +60,10 @@ export default function UserMessage({ message, showAvatar = true, showBorder = t
     container: { display: 'flex', alignItems: 'flex-start', gap: '0px', width: '100%', flexDirection: 'row-reverse' },
     messageWrapper: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', maxWidth: '85%' },
     bubble: { padding: '12px 16px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', position: 'relative', background: '#1e1e1e', color: '#dcdcdc', border: showBorder ? 'none' : 'none', cursor: 'default' },
-    content: { fontSize: '16px', whiteSpace: 'pre-wrap', lineHeight: '1.5', margin: 0, textAlign: 'left' },
-    h1: { fontSize: '18px', fontWeight: 700, lineHeight: '1.6', margin: '0 0 8px 0' },
-    h2: { fontSize: '16px', fontWeight: 700, lineHeight: '1.6', margin: '0 0 6px 0' },
-    h3: { fontSize: '15px', fontWeight: 600, lineHeight: '1.6', margin: '0 0 4px 0' },
+    content: { fontSize: '16px', whiteSpace: 'normal', lineHeight: '1.5', margin: 0, textAlign: 'left' },
+    h1: { fontSize: '24px', fontWeight: 700, lineHeight: '1.6', margin: '24px 0 16px 0' },
+    h2: { fontSize: '20px', fontWeight: 700, lineHeight: '1.6', margin: '20px 0 12px 0' },
+    h3: { fontSize: '15px', fontWeight: 600, lineHeight: '1.6', margin: '12px 0 8px 0' },
     table: { 
       borderCollapse: 'collapse', 
       width: '100%', 
@@ -119,34 +118,23 @@ export default function UserMessage({ message, showAvatar = true, showBorder = t
             </div>
           ) : (
             <div style={styles.content}>
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm]}
-                skipHtml={false}
-                components={{
-                  p: ({ children, ...props }) => {
-                    // Skip empty paragraphs
-                    if (!children || (typeof children === 'string' && children.trim() === '')) {
-                      return null
-                    }
-                    return <p style={{ margin: '4px 0', lineHeight: '1.6' }} {...props}>{children}</p>
-                  },
-                  h1: ({ ...props }) => (<div role="heading" aria-level={1} style={styles.h1} {...props} />),
-                  h2: ({ ...props }) => (<div role="heading" aria-level={2} style={styles.h2} {...props} />),
-                  h3: ({ ...props }) => (<div role="heading" aria-level={3} style={styles.h3} {...props} />),
-                  ul: ({ ...props }) => (<ul style={{ margin: '4px 0', paddingLeft: '20px' }} {...props} />),
-                  ol: ({ ...props }) => (<ol style={{ margin: '4px 0', paddingLeft: '20px' }} {...props} />),
-                  li: ({ ...props }) => (<li style={{ margin: '2px 0' }} {...props} />),
-                  br: () => null,  // 忽略单独的 <br> 标签，避免额外空行
-                  table: ({ ...props }) => (<table style={styles.table} {...props} />),
-                  thead: ({ ...props }) => (<thead style={styles.thead} {...props} />),
-                  tbody: ({ ...props }) => (<tbody {...props} />),
-                  tr: ({ ...props }) => (<tr style={styles.tr} {...props} />),
-                  th: ({ ...props }) => (<th style={styles.th} {...props} />),
-                  td: ({ ...props }) => (<td style={styles.td} {...props} />)
+              <MarkdownRenderer
+                content={(message.content || '').replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n')}
+                componentsStyle={{
+                  p: { margin: '8px 0', lineHeight: '1.6' },
+                  h1: styles.h1,
+                  h2: styles.h2,
+                  h3: styles.h3,
+                  ul: { margin: '8px 0', paddingLeft: '20px' },
+                  ol: { margin: '8px 0', paddingLeft: '20px' },
+                  li: { margin: '4px 0' },
+                  table: styles.table,
+                  thead: styles.thead,
+                  tr: styles.tr,
+                  th: styles.th,
+                  td: styles.td,
                 }}
-              >
-                {message.content}
-              </ReactMarkdown>
+              />
             </div>
           )}
         </div>

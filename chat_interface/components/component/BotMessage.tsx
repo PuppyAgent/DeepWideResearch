@@ -1,7 +1,6 @@
 import { Copy, Check } from 'lucide-react'
 import { CSSProperties, useState, useEffect } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import MarkdownRenderer from './MarkdownRenderer'
 import type { Message } from '../types'
 
 const StyleManager = {
@@ -31,6 +30,26 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
   const [copied, setCopied] = useState(false)
   const [hoveredUrl, setHoveredUrl] = useState<string | null>(null)
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
+
+  // Add global mouse move listener to detect when mouse leaves link areas
+  useEffect(() => {
+    const handleGlobalMouseMove = (e: MouseEvent) => {
+      if (!hoveredUrl) return
+      
+      // Check if mouse is over any link element
+      const target = e.target as HTMLElement
+      const isOverLink = target.tagName === 'A' || target.closest('a')
+      
+      if (!isOverLink) {
+        setHoveredUrl(null)
+      }
+    }
+    
+    document.addEventListener('mousemove', handleGlobalMouseMove)
+    return () => {
+      document.removeEventListener('mousemove', handleGlobalMouseMove)
+    }
+  }, [hoveredUrl])
 
   useEffect(() => {
     StyleManager.inject('puppychat-animations', `
@@ -170,10 +189,10 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
       borderRadius: '16px',
       border: '1px solid rgba(255, 255, 255, 0.05)'  // 非常浅的边框，几乎看不见
     },
-    content: { fontSize: '16px', color: '#d2d2d2', whiteSpace: 'pre-wrap', lineHeight: '1.6', margin: 0, textAlign: 'left', wordBreak: 'break-word', overflowWrap: 'break-word', width: '100%' },
-    h1: { fontSize: '20px', fontWeight: 700, lineHeight: '1.6', margin: '0 0 6px 0' },
-    h2: { fontSize: '18px', fontWeight: 700, lineHeight: '1.6', margin: '0 0 4px 0' },
-    h3: { fontSize: '17px', fontWeight: 600, lineHeight: '1.6', margin: '0 0 3px 0' },
+    content: { fontSize: '16px', color: '#d2d2d2', whiteSpace: 'normal', lineHeight: '1.6', margin: 0, textAlign: 'left', wordBreak: 'break-word', overflowWrap: 'break-word', width: '100%' },
+    h1: { fontSize: '24px', fontWeight: 700, lineHeight: '1.6', margin: '24px 0 16px 0' },
+    h2: { fontSize: '20px', fontWeight: 700, lineHeight: '1.6', margin: '20px 0 12px 0' },
+    h3: { fontSize: '17px', fontWeight: 600, lineHeight: '1.6', margin: '12px 0 8px 0' },
     link: {
       color: '#4a90e2',
       textDecoration: 'underline',
@@ -246,7 +265,7 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
       fontSize: '16px',
       color: '#d2d2d2',
       lineHeight: '1.6',
-      whiteSpace: 'pre-wrap',
+      whiteSpace: 'normal',
       transition: 'opacity 0.3s ease-in-out',
       wordBreak: 'break-word',
       overflowWrap: 'break-word',
@@ -263,18 +282,8 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
       <div style={styles.messageWrapper}>
         {isTyping ? (
           <div style={{
-            fontSize: '14px',
-            color: 'transparent',
-            padding: 0,
-            background: 'linear-gradient(90deg, #888 0%, #888 30%, #fff 50%, #888 70%, #888 100%)',
-            backgroundClip: 'text',
-            WebkitBackgroundClip: 'text',
-            backgroundSize: '200% 100%',
-            animation: 'textFlash 2s linear infinite',
-            transition: 'opacity 0.3s ease-in-out',
-            lineHeight: '1.6'
+            height: '20px'
           }}>
-            Preparing...
           </div>
         ) : (
           <>
@@ -371,77 +380,35 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
               message.content.length > 100  // If content is long, it's likely a report
             ) && (
               <div style={isStreaming ? styles.reportStreaming : styles.content}>
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm]}
-                  skipHtml={false}
-                  components={{
-                  p: ({ children, ...props }) => {
-                    // Skip empty paragraphs
-                    if (!children || (typeof children === 'string' && children.trim() === '')) {
-                      return null
+                <MarkdownRenderer
+                  content={(message.content || '').replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n')}
+                  componentsStyle={{
+                    p: { margin: '8px 0', lineHeight: '1.6', wordBreak: 'break-word', overflowWrap: 'break-word' },
+                    h1: styles.h1,
+                    h2: styles.h2,
+                    h3: styles.h3,
+                    ul: { margin: '8px 0', paddingLeft: '20px' },
+                    ol: { margin: '8px 0', paddingLeft: '20px' },
+                    li: { margin: '4px 0' },
+                    link: styles.link,
+                    table: styles.table,
+                    thead: styles.thead,
+                    tr: styles.tr,
+                    th: styles.th,
+                    td: styles.td,
+                  }}
+                  onLinkEnter={(href, e) => { e.stopPropagation(); handleLinkHover(href, e) }}
+                  onLinkLeave={(e) => { e.stopPropagation(); handleLinkLeave() }}
+                  onLinkMove={(href, e) => {
+                    if (hoveredUrl && href) {
+                      const target = e.currentTarget as HTMLElement
+                      const rect = target.getBoundingClientRect()
+                      const x = rect.left
+                      const y = rect.bottom + 8
+                      setTooltipPosition({ x, y })
                     }
-                    
-                    return <p style={{ margin: '4px 0', lineHeight: '1.6', wordBreak: 'break-word', overflowWrap: 'break-word' }} {...props}>{children}</p>
-                  },
-                  h1: ({ ...props }) => (<div role="heading" aria-level={1} style={styles.h1} {...props} />),
-                  h2: ({ ...props }) => (<div role="heading" aria-level={2} style={styles.h2} {...props} />),
-                  h3: ({ ...props }) => (<div role="heading" aria-level={3} style={styles.h3} {...props} />),
-                  ul: ({ ...props }) => (<ul style={{ margin: '4px 0', paddingLeft: '20px' }} {...props} />),
-                  ol: ({ ...props }) => (<ol style={{ margin: '4px 0', paddingLeft: '20px' }} {...props} />),
-                  li: ({ ...props }) => (<li style={{ margin: '2px 0' }} {...props} />),
-                  br: () => null,  // 忽略单独的 <br> 标签，避免额外空行
-                  a: ({ href, children, ...props }) => {
-                    // Check if this is a citation link (text is just a number)
-                    const childText = typeof children === 'string' ? children : 
-                                     (Array.isArray(children) && children.length === 1 && typeof children[0] === 'string') ? children[0] : null
-                    
-                    const isCitation = childText && /^\d+$/.test(childText.trim())
-                    
-                    if (isCitation) {
-                      // Render as a circular citation badge
-                      return (
-                        <a
-                          href={href}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="citation-reference"
-                          style={{
-                            textDecoration: 'none'
-                          }}
-                          onMouseEnter={(e) => href && handleLinkHover(href, e)}
-                          onMouseLeave={handleLinkLeave}
-                          {...props}
-                        >
-                          {childText}
-                        </a>
-                      )
-                    }
-                    
-                    // Regular link
-                    return (
-                      <a
-                        href={href}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={styles.link}
-                        onMouseEnter={(e) => href && handleLinkHover(href, e)}
-                        onMouseLeave={handleLinkLeave}
-                        {...props}
-                      >
-                        {children}
-                      </a>
-                    )
-                  },
-                  table: ({ ...props }) => (<table style={styles.table} {...props} />),
-                  thead: ({ ...props }) => (<thead style={styles.thead} {...props} />),
-                  tbody: ({ ...props }) => (<tbody {...props} />),
-                  tr: ({ ...props }) => (<tr style={styles.tr} {...props} />),
-                  th: ({ ...props }) => (<th style={styles.th} {...props} />),
-                  td: ({ ...props }) => (<td style={styles.td} {...props} />)
-                }}
-              >
-                {message.content}
-              </ReactMarkdown>
+                  }}
+                />
               </div>
             )}
           </>
