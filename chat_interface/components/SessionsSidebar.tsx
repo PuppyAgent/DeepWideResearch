@@ -56,7 +56,7 @@ export default function SessionsSidebar({
       )}
 
       {/* 会话列表 */}
-      <ul className='flex flex-col gap-[4px] items-start relative w-full overflow-y-auto puppychat-messages' style={{ flex: 1, minHeight: 0 }}>
+      <ul className='flex flex-col gap-[4px] items-start relative w-full overflow-y-auto puppychat-scrollbar-dark' style={{ flex: 1, minHeight: 0 }}>
         {list.length === 0 ? (
           <div className='w-full flex items-center justify-center py-8'>
             <span className='text-[#888] text-[11px] font-normal tracking-wider'>Empty History</span>

@@ -239,6 +239,26 @@ export default function ChatInterface({
         background-color: rgba(120, 120, 120, 0.9);
       }
 
+      /* Dark scrollbar variant for overlays/lists */
+      .puppychat-scrollbar-dark {
+        scrollbar-color: rgba(70, 70, 70, 0.95) transparent; /* Firefox */
+        scrollbar-width: thin;
+      }
+      .puppychat-scrollbar-dark::-webkit-scrollbar {
+        width: 8px;
+        height: 8px;
+      }
+      .puppychat-scrollbar-dark::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .puppychat-scrollbar-dark::-webkit-scrollbar-thumb {
+        background-color: rgba(70, 70, 70, 0.95);
+        border-radius: 8px;
+      }
+      .puppychat-scrollbar-dark::-webkit-scrollbar-thumb:hover {
+        background-color: rgba(90, 90, 90, 1);
+      }
+
       @keyframes slideInFromRight {
         from {
           opacity: 0;
@@ -252,10 +272,10 @@ export default function ChatInterface({
     `)
   }, [])
 
-  // Inject fade-at-edges styles for chat history area
+  // Inject fade-at-edges styles for chat history area (scoped to chat only)
   useEffect(() => {
     StyleManager.inject('puppychat-fade-edges', `
-      .puppychat-messages {
+      .puppychat-history {
         --fade-size: 32px;
         /* smoother multi-stop easing: closer to edge = darker (more mask) */
         -webkit-mask-image: linear-gradient(
@@ -287,7 +307,7 @@ export default function ChatInterface({
       }
 
       /* Only fade bottom when scrolled to top */
-      .puppychat-messages.fade-bottom-only {
+      .puppychat-history.fade-bottom-only {
         -webkit-mask-image: linear-gradient(
           to bottom,
           rgba(0, 0, 0, 1) 0,
@@ -309,7 +329,7 @@ export default function ChatInterface({
       }
 
       /* Only fade top when scrolled to bottom */
-      .puppychat-messages.fade-top-only {
+      .puppychat-history.fade-top-only {
         -webkit-mask-image: linear-gradient(
           to bottom,
           rgba(0, 0, 0, 0) 0,
@@ -331,7 +351,7 @@ export default function ChatInterface({
       }
 
       /* No fade when content doesn't overflow */
-      .puppychat-messages.fade-none {
+      .puppychat-history.fade-none {
         -webkit-mask-image: none;
         mask-image: none;
       }
@@ -813,7 +833,7 @@ export default function ChatInterface({
       )}
 
       {/* Messages */}
-      <div ref={messagesContainerRef} style={styles.messagesContainer} className="puppychat-messages">
+      <div ref={messagesContainerRef} style={styles.messagesContainer} className="puppychat-messages puppychat-history">
         {messages.map((message, index) => {
           // If it's the welcome message and we're streaming it, show the partial content
           const isWelcomeMessage = index === 0 && message.sender === 'bot' && messages.length === 1
