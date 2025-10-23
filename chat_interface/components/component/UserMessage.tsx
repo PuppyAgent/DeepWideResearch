@@ -59,7 +59,7 @@ export default function UserMessage({ message, showAvatar = true, showBorder = t
   const styles: { [key: string]: CSSProperties } = {
     container: { display: 'flex', alignItems: 'flex-start', gap: '0px', width: '100%', flexDirection: 'row-reverse' },
     messageWrapper: { display: 'flex', flexDirection: 'column', alignItems: 'flex-end', maxWidth: '85%' },
-    bubble: { padding: '12px 16px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', position: 'relative', background: '#1e1e1e', color: '#dcdcdc', border: showBorder ? 'none' : 'none', cursor: 'default' },
+    bubble: { padding: '0 16px', borderRadius: '16px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', position: 'relative', background: '#1e1e1e', color: '#dcdcdc', border: showBorder ? 'none' : 'none', cursor: 'default' },
     content: { fontSize: '16px', whiteSpace: 'normal', lineHeight: '1.5', margin: 0, textAlign: 'left' },
     h1: { fontSize: '24px', fontWeight: 700, lineHeight: '1.6', margin: '32px 0 16px 0' },
     h2: { fontSize: '20px', fontWeight: 700, lineHeight: '1.6', margin: '24px 0 12px 0' },
