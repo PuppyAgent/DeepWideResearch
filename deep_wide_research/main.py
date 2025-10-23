@@ -213,12 +213,13 @@ async def test_mcp_services(request: MCPTestRequest):
     import os
     
     # Configuration mapping for MCP services
+    # Note: HTTP MCP uses underscores in tool names
     mcp_config = {
         "tavily": {
             "api_key_env": "TAVILY_API_KEY",
             "default_tools": [
-                {"name": "tavily-search", "description": "Search the web using Tavily"},
-                {"name": "tavily-extract", "description": "Extract content from URLs"}
+                {"name": "tavily_search", "description": "Search the web using Tavily"},
+                {"name": "tavily_extract", "description": "Extract content from URLs"}
             ]
         },
         "exa": {

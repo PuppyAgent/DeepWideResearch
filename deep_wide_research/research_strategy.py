@@ -35,8 +35,9 @@ except ImportError:
 
 
 # MCP tool selection configuration: {server_name: [tool_names]}
+# Note: HTTP MCP uses underscores in tool names (tavily_search, not tavily-search)
 MCP_TOOLS_CONFIG = {
-    "tavily": ["tavily-search"],
+    "tavily": ["tavily_search"],  # Fixed: use underscore (HTTP MCP naming)
     "exa": ["web_search_exa"]
 }
 

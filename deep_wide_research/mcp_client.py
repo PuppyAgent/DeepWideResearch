@@ -414,7 +414,19 @@ class MCPClient:
                 
             elif self.transport_type == "http":
                 import aiohttp
-                async with aiohttp.ClientSession() as http_sess:
+                import ssl
+                
+                # Create SSL context with proper certificate verification
+                ssl_context = ssl.create_default_context()
+                
+                # Use system proxy if available (for local development with proxy)
+                proxy = os.getenv("https_proxy") or os.getenv("HTTPS_PROXY") or os.getenv("http_proxy") or os.getenv("HTTP_PROXY")
+                
+                # Create connector with SSL and timeout settings
+                connector = aiohttp.TCPConnector(ssl=ssl_context)
+                timeout = aiohttp.ClientTimeout(total=30, connect=10)
+                
+                async with aiohttp.ClientSession(connector=connector, timeout=timeout) as http_sess:
                     # MCP uses JSON-RPC 2.0 protocol
                     payload = {
                         "jsonrpc": "2.0",
@@ -426,7 +438,13 @@ class MCPClient:
                         "Content-Type": "application/json",
                         "Accept": "application/json, text/event-stream"
                     }
-                    async with http_sess.post(self._server_url, json=payload, headers=headers) as resp:
+                    
+                    # Make request with proxy if available
+                    kwargs = {"json": payload, "headers": headers}
+                    if proxy:
+                        kwargs["proxy"] = proxy
+                    
+                    async with http_sess.post(self._server_url, **kwargs) as resp:
                         if resp.status == 200:
                             # Remote MCP returns SSE format, needs parsing
                             text = await resp.text()
@@ -504,7 +522,19 @@ class MCPClient:
                 
             elif self.transport_type == "http":
                 import aiohttp
-                async with aiohttp.ClientSession() as http_sess:
+                import ssl
+                
+                # Create SSL context with proper certificate verification
+                ssl_context = ssl.create_default_context()
+                
+                # Use system proxy if available (for local development with proxy)
+                proxy = os.getenv("https_proxy") or os.getenv("HTTPS_PROXY") or os.getenv("http_proxy") or os.getenv("HTTP_PROXY")
+                
+                # Create connector with SSL and timeout settings
+                connector = aiohttp.TCPConnector(ssl=ssl_context)
+                timeout = aiohttp.ClientTimeout(total=30, connect=10)
+                
+                async with aiohttp.ClientSession(connector=connector, timeout=timeout) as http_sess:
                     # MCP uses JSON-RPC 2.0 protocol to call tools
                     payload = {
                         "jsonrpc": "2.0",
@@ -519,7 +549,13 @@ class MCPClient:
                         "Content-Type": "application/json",
                         "Accept": "application/json, text/event-stream"
                     }
-                    async with http_sess.post(self._server_url, json=payload, headers=headers) as resp:
+                    
+                    # Make request with proxy if available
+                    kwargs = {"json": payload, "headers": headers}
+                    if proxy:
+                        kwargs["proxy"] = proxy
+                    
+                    async with http_sess.post(self._server_url, **kwargs) as resp:
                         if resp.status == 200:
                             # Remote MCP returns SSE format, needs parsing
                             text = await resp.text()
@@ -614,7 +650,8 @@ if __name__ == "__main__":
             return
         
         # Tools needed by Deep Research
-        needed_tools = ["tavily-search", "web_search_exa", "tavily-extract"]
+        # Note: HTTP MCP uses underscores in tool names
+        needed_tools = ["tavily_search", "web_search_exa", "tavily_extract"]
         
         # Test all registered servers
         for server_name in registry.list_servers():
