@@ -106,7 +106,7 @@ export default function Home() {
         name: 'Tavily', 
         enabled: true, 
         tools: [
-          { name: 'tavily-search', enabled: true, description: 'Web search using Tavily' }
+          { name: 'tavily_search', enabled: true, description: 'Web search using Tavily' }
         ]
       },
       { 
