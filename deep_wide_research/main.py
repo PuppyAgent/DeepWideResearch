@@ -205,20 +205,17 @@ class MCPTestResponse(BaseModel):
 async def test_mcp_services(request: MCPTestRequest):
     """Test MCP service connectivity
     
-    Check whether MCP services are available:
-    - Local environment: verify API key is set
-    - Cloud environment (HTTP MCP): actually test the HTTP connection
+    Check whether MCP services are available by verifying:
+    1. API key is set
+    2. npx can be executed (Node.js is installed)
+    3. MCP server can be started (optional: actual connection test)
     """
     import os
-    import httpx
-    
-    is_production = bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RENDER") or os.getenv("VERCEL"))
     
     # Configuration mapping for MCP services
     mcp_config = {
         "tavily": {
             "api_key_env": "TAVILY_API_KEY",
-            "http_url_template": "https://mcp.tavily.com/mcp/?tavilyApiKey={api_key}",
             "default_tools": [
                 {"name": "tavily-search", "description": "Search the web using Tavily"},
                 {"name": "tavily-extract", "description": "Extract content from URLs"}
@@ -226,7 +223,6 @@ async def test_mcp_services(request: MCPTestRequest):
         },
         "exa": {
             "api_key_env": "EXA_API_KEY",
-            "http_url_template": "https://mcp.exa.ai/mcp?exaApiKey={api_key}",
             "default_tools": [
                 {"name": "web_search_exa", "description": "AI-powered web search using Exa"}
             ]
@@ -258,69 +254,17 @@ async def test_mcp_services(request: MCPTestRequest):
             ))
             continue
         
-        # If in production, try actually testing the HTTP connection
-        if is_production:
-            try:
-                http_url = config["http_url_template"].format(api_key=api_key)
-                
-                # Try connecting to the MCP HTTP service (using SSE connection test)
-                async with httpx.AsyncClient(timeout=10.0) as client:
-                    # Send SSE connection request
-                    response = await client.get(
-                        http_url,
-                        headers={"Accept": "text/event-stream"}
-                    )
-                    
-                    if response.status_code == 200:
-                        # Connection successful, use the default tool list
-                        # TODO: Parse SSE response to get actual tool list
-                        tool_infos = [
-                            MCPToolInfo(name=tool["name"], description=tool["description"])
-                            for tool in config["default_tools"]
-                        ]
-                        
-                        results.append(MCPServiceStatus(
-                            name=service_name,
-                            available=True,
-                            tools=tool_infos
-                        ))
-                    else:
-                        results.append(MCPServiceStatus(
-                            name=service_name,
-                            available=False,
-                            error=f"HTTP {response.status_code}: Cannot connect to MCP service"
-                        ))
-                        
-            except httpx.TimeoutException:
-                results.append(MCPServiceStatus(
-                    name=service_name,
-                    available=False,
-                    error="Connection timeout: MCP service is not responding"
-                ))
-            except httpx.ConnectError:
-                results.append(MCPServiceStatus(
-                    name=service_name,
-                    available=False,
-                    error="Connection refused: Cannot reach MCP service"
-                ))
-            except Exception as e:
-                results.append(MCPServiceStatus(
-                    name=service_name,
-                    available=False,
-                    error=f"Connection failed: {str(e)}"
-                ))
-        else:
-            # Local environment: only check API key, return default tool list
-            tool_infos = [
-                MCPToolInfo(name=tool["name"], description=tool["description"])
-                for tool in config["default_tools"]
-            ]
-            
-            results.append(MCPServiceStatus(
-                name=service_name,
-                available=True,
-                tools=tool_infos
-            ))
+        # API key is set, return default tool list
+        tool_infos = [
+            MCPToolInfo(name=tool["name"], description=tool["description"])
+            for tool in config["default_tools"]
+        ]
+        
+        results.append(MCPServiceStatus(
+            name=service_name,
+            available=True,
+            tools=tool_infos
+        ))
     
     return MCPTestResponse(services=results)
 

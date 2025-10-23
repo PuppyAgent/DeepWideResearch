@@ -86,52 +86,32 @@ class MCPRegistry:
         """Load built-in MCP servers (Tavily, Exa)"""
         
         # Tavily MCP Server
-        # Railway: use remote HTTP; Local: use npx
+        # Always use npx (works both locally and on Railway with Node.js installed)
         tavily_api_key = os.getenv("TAVILY_API_KEY")
         if tavily_api_key:
-            if os.getenv("RAILWAY_ENVIRONMENT"):
-                # Use remote HTTP MCP on Railway
-                self.register(MCPServerConfig(
-                    name="tavily",
-                    transport_type="http",
-                    server_url=f"https://mcp.tavily.com/mcp/?tavilyApiKey={tavily_api_key}",
-                    description="Tavily search MCP server - powerful web search"
-                ))
-            else:
-                # Use npx locally
-                self.register(MCPServerConfig(
-                    name="tavily",
-                    transport_type="stdio",
-                    command="npx",
-                    args=["-y", "tavily-mcp@0.1.3"],
-                    env={"TAVILY_API_KEY": tavily_api_key},
-                    description="Tavily search MCP server - powerful web search"
-                ))
+            self.register(MCPServerConfig(
+                name="tavily",
+                transport_type="stdio",
+                command="npx",
+                args=["-y", "tavily-mcp@0.1.3"],
+                env={"TAVILY_API_KEY": tavily_api_key},
+                description="Tavily search MCP server - powerful web search"
+            ))
         else:
             print("⚠️  Tavily MCP server skipped: TAVILY_API_KEY not found")
         
         # Exa MCP Server
-        # Railway: use remote HTTP; Local: use npx
+        # Always use npx (works both locally and on Railway with Node.js installed)
         exa_api_key = os.getenv("EXA_API_KEY")
         if exa_api_key:
-            if os.getenv("RAILWAY_ENVIRONMENT"):
-                # Use remote HTTP MCP on Railway
-                self.register(MCPServerConfig(
-                    name="exa",
-                    transport_type="http",
-                    server_url=f"https://mcp.exa.ai/mcp?exaApiKey={exa_api_key}",
-                    description="Exa search MCP server - AI-powered web search"
-                ))
-            else:
-                # Use npx locally
-                self.register(MCPServerConfig(
-                    name="exa",
-                    transport_type="stdio",
-                    command="npx",
-                    args=["-y", "exa-mcp-server"],
-                    env={"EXA_API_KEY": exa_api_key},
-                    description="Exa search MCP server - AI-powered web search"
-                ))
+            self.register(MCPServerConfig(
+                name="exa",
+                transport_type="stdio",
+                command="npx",
+                args=["-y", "exa-mcp-server"],
+                env={"EXA_API_KEY": exa_api_key},
+                description="Exa search MCP server - AI-powered web search"
+            ))
         else:
             print("⚠️  Exa MCP server skipped: EXA_API_KEY not found")
     

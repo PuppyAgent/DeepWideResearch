@@ -20,7 +20,7 @@
 </p>
 
 <p align="center">
-  Build any agentic RAG with depth & width
+  Agentic RAG for All <br> with depth & width
 </p>
 
 <p align="center">
@@ -109,6 +109,81 @@ We built **Open Deep Wide Research** to be that solution, providing one agent fo
 - **Customizable Search Engines** – Integrate any search provider. Tavily and Exa supported out-of-the-box. As long as it supports MCP.
 
 
+
+## Get Started
+
+### Prerequisites
+- Python 3.9+ and Node.js 18+
+- API keys: Open Router (required), and  Exa / Tavily (at least one)
+- Recommended model: open-o4mini
+
+### Deployment Options
+- API-only (Backend): If you only need the Deep Research backend as an API to embed in your codebase, deploy the backend only.
+- Full stack (Frontend + Backend): If you want the full experience with the web UI, deploy both the backend and the frontend.
+
+### Backend
+
+1. Copy the env template:
+
+```bash
+cp deep_wide_research/env.example deep_wide_research/.env
+```
+
+2. Edit the copied .env and set your keys:
+
+```bash
+# deep_wide_research/.env
+OPENROUTER_API_KEY=your_key
+# At least one of the following
+EXA_API_KEY=your_exa_key
+# or
+TAVILY_API_KEY=your_tavily_key
+```
+
+> You can obtain the Tavily and Exa API keys from their official sites: [Tavily](https://www.tavily.com/) and [Exa](https://exa.ai/).
+
+3. Set up the environment:
+
+```bash
+cd deep_wide_research
+python -m venv deep-wide-research
+source deep-wide-research/bin/activate
+pip install -r requirements.txt
+```
+
+4. Start the backend server:
+
+```bash
+python main.py
+```
+
+### Frontend
+
+1. Copy the env template:
+
+```bash
+cp chat_interface/env.example chat_interface/.env.local
+```
+
+2. Install dependencies and start the dev server:
+
+```bash
+cd chat_interface
+npm install
+npm run dev
+```
+
+3. Open the app:
+
+Open **http://localhost:3000** – Start researching in seconds.
+
+### Docker (Production)
+
+```bash
+docker-compose up -d
+```
+
+---
 
 ## How We Compare
 
@@ -211,83 +286,7 @@ We built **Open Deep Wide Research** to be that solution, providing one agent fo
 
 <sub><i>Names are trademarks of their owners; descriptions are generalized and may change.</i></sub>
 
-
-## Get Started
-
-### Prerequisites
-- Python 3.9+ and Node.js 18+
-- API keys: Open Router (required), and  Exa / Tavily (at least one)
-- Recommended model: open-o4mini
-
-### Deployment Options
-- API-only (Backend): If you only need the Deep Research backend as an API to embed in your codebase, deploy the backend only.
-- Full stack (Frontend + Backend): If you want the full experience with the web UI, deploy both the backend and the frontend.
-
-### Backend
-
-1. Copy the env template:
-
-```bash
-cp deep_wide_research/env.example deep_wide_research/.env
-```
-
-2. Edit the copied .env and set your keys:
-
-```bash
-# deep_wide_research/.env
-OPENROUTER_API_KEY=your_key
-# At least one of the following
-EXA_API_KEY=your_exa_key
-# or
-TAVILY_API_KEY=your_tavily_key
-```
-
-> You can obtain the Tavily and Exa API keys from their official sites: [Tavily](https://www.tavily.com/) and [Exa](https://exa.ai/).
-
-3. Set up the environment:
-
-```bash
-cd deep_wide_research
-python -m venv deep-wide-research
-source deep-wide-research/bin/activate
-pip install -r requirements.txt
-```
-
-4. Start the backend server:
-
-```bash
-python main.py
-```
-
-### Frontend
-
-1. Copy the env template:
-
-```bash
-cp chat_interface/env.example chat_interface/.env.local
-```
-
-2. Install dependencies and start the dev server:
-
-```bash
-cd chat_interface
-npm install
-npm run dev
-```
-
-3. Open the app:
-
-Open **http://localhost:3000** – Start researching in seconds.
-
-### Docker (Production)
-
-```bash
-docker-compose up -d
-```
-
 ---
-
-
 
 ### Deep Wide Research Archietecture
 
