@@ -1,6 +1,7 @@
 'use client'
 
 import React, { createContext, useContext, useState, useCallback, useEffect } from 'react'
+import { useAuth } from '../supabase/SupabaseAuthProvider'
 
 // Type definitions
 export interface ChatMessage {
@@ -72,63 +73,76 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   // ==================== API Call Functions ====================
   
   // Fetch all sessions list (lightweight, metadata only)
+  const { supabase, session: authSession } = useAuth()
+
   const fetchSessions = useCallback(async () => {
+    if (!supabase) return
     setIsLoading(true)
     try {
-      const res = await fetch('/api/history', { cache: 'no-store' })
-      if (!res.ok) throw new Error('Failed to load sessions')
-      const data = await res.json()
-      setSessions(data.sessions || [])
+      const { data, error } = await supabase
+        .from('threads')
+        .select('id, title, created_at, updated_at')
+        .order('updated_at', { ascending: false })
+      if (error) throw error
+      const result: Session[] = (data || []).map((t: any) => ({
+        id: t.id,
+        title: t.title || 'New Chat',
+        createdAt: t.created_at ? Date.parse(t.created_at) : Date.now(),
+        updatedAt: t.updated_at ? Date.parse(t.updated_at) : Date.now(),
+      }))
+      setSessions(result)
     } catch (e) {
       console.error('Failed to fetch sessions:', e)
       throw e
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [supabase])
 
   // Fetch detailed messages for a single session (lazy-loaded)
   const fetchSessionMessages = useCallback(async (id: string) => {
+    if (!supabase) return []
     setIsLoadingChat(true)
     try {
-      const res = await fetch(`/api/history/${id}`, { cache: 'no-store' })
-      if (!res.ok) throw new Error('Failed to load session messages')
-      const data = await res.json()
-      return Array.isArray(data.messages) ? data.messages : []
+      const { data, error } = await supabase
+        .from('messages')
+        .select('role, content, created_at')
+        .eq('thread_id', id)
+        .order('created_at', { ascending: true })
+      if (error) throw error
+      const msgs: ChatMessage[] = (data || []).map((m: any) => ({
+        role: m.role,
+        content: m.content,
+        timestamp: m.created_at ? Date.parse(m.created_at) : undefined
+      }))
+      return msgs
     } catch (e) {
       console.error('Failed to fetch session messages:', e)
       return []
     } finally {
       setIsLoadingChat(false)
     }
-  }, [])
+  }, [supabase])
 
   // Create new session (save to backend immediately)
   const createSession = useCallback(async (title = 'New Chat') => {
+    if (!supabase || !authSession) throw new Error('Not authenticated')
     try {
-      const res = await fetch('/api/history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, messages: [] })
-      })
-      if (!res.ok) throw new Error('Failed to create session')
-      const data = await res.json()
-      
-      // Refresh session list
+      const { data, error } = await supabase
+        .from('threads')
+        .insert([{ user_id: authSession.user.id, title }])
+        .select('id')
+        .single()
+      if (error) throw error
+      const newId = data.id as string
       await fetchSessions()
-      
-      // Initialize empty chat history
-      setChatHistory(prev => ({
-        ...prev,
-        [data.id]: []
-      }))
-      
-      return data.id
+      setChatHistory(prev => ({ ...prev, [newId]: [] }))
+      return newId
     } catch (e) {
       console.error('Failed to create session:', e)
       throw e
     }
-  }, [fetchSessions])
+  }, [supabase, authSession, fetchSessions])
 
   // Create temporary session (don't save to backend until user sends the first message)
   const createTempSession = useCallback(() => {
@@ -160,18 +174,25 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       // Get messages from temporary session
       const messages = chatHistory[tempSessionId] || []
       
-      // Create permanent session
-      const res = await fetch('/api/history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          title, 
-          messages: messages.map(m => ({ ...m, timestamp: m.timestamp ?? Date.now() }))
-        })
-      })
-      
-      if (!res.ok) throw new Error('Failed to promote session')
-      const data = await res.json()
+      if (!supabase || !authSession) throw new Error('Not authenticated')
+      const { data: thread, error: threadErr } = await supabase
+        .from('threads')
+        .insert([{ user_id: authSession.user.id, title }])
+        .select('id')
+        .single()
+      if (threadErr) throw threadErr
+      const newId = thread.id as string
+      if (messages.length > 0) {
+        const rows = messages.map(m => ({
+          thread_id: newId,
+          user_id: authSession.user.id,
+          role: m.role,
+          content: m.content,
+          created_at: m.timestamp ? new Date(m.timestamp).toISOString() : undefined,
+        }))
+        const { error: msgErr } = await supabase.from('messages').insert(rows)
+        if (msgErr) throw msgErr
+      }
       
       // Refresh session list
       await fetchSessions()
@@ -179,22 +200,22 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       // Migrate messages from temporary session to new permanent session
       setChatHistory(prev => {
         const newHistory = { ...prev }
-        newHistory[data.id] = messages
+        newHistory[newId] = messages
         delete newHistory[tempSessionId]
         return newHistory
       })
       
       // Clear temporary session flag
       setTempSessionId(null)
-      setCurrentSessionId(data.id)
+      setCurrentSessionId(newId)
       
-      console.log('✅ Temp session promoted to:', data.id)
-      return data.id
+      console.log('✅ Temp session promoted to:', newId)
+      return newId
     } catch (e) {
       console.error('Failed to promote temp session:', e)
       throw e
     }
-  }, [tempSessionId, chatHistory, fetchSessions])
+  }, [tempSessionId, chatHistory, supabase, authSession, fetchSessions])
 
   // Switch session (lazy-loading strategy)
   const switchSession = useCallback(async (id: string) => {
@@ -256,10 +277,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       }
       
       // Delete in background (non-blocking UI)
-      const res = await fetch(`/api/history/${id}`, { method: 'DELETE' })
-      if (!res.ok && res.status !== 204) {
-        throw new Error('Delete failed')
-      }
+      if (!supabase) throw new Error('Not ready')
+      const { error } = await supabase.from('threads').delete().eq('id', id).limit(1)
+      if (error) throw error
       
       console.log('✅ Session deleted:', id)
     } catch (e) {
@@ -271,7 +291,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       }
       throw e
     }
-  }, [currentSessionId, sessions, switchSession])
+  }, [currentSessionId, sessions, switchSession, supabase])
 
   // ==================== Message Operations ====================
   
@@ -302,49 +322,42 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     try {
       const firstUser = messages.find(m => m.role === 'user')
       const title = firstUser ? (firstUser.content || 'New Chat').slice(0, 60) : 'New Chat'
-      
-      await fetch(`/api/history/${sessionId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title,
-          messages: messages.map(m => ({ ...m, timestamp: m.timestamp ?? Date.now() }))
-        })
-      })
-      
-      // Refresh session list (update updatedAt timestamp)
+      if (!supabase || !authSession) throw new Error('Not authenticated')
+      await supabase.from('threads').update({ title }).eq('id', sessionId)
+      await supabase.from('messages').delete().eq('thread_id', sessionId)
+      if (messages.length > 0) {
+        const rows = messages.map(m => ({
+          thread_id: sessionId,
+          user_id: authSession.user.id,
+          role: m.role,
+          content: m.content,
+          created_at: new Date(m.timestamp ?? Date.now()).toISOString(),
+        }))
+        await supabase.from('messages').insert(rows)
+      }
       await fetchSessions()
     } catch (e) {
       console.warn('Failed to save session to backend:', e)
       throw e
     }
-  }, [fetchSessions])
+  }, [fetchSessions, supabase, authSession])
 
   // ==================== Initialization ====================
   
   useEffect(() => {
+    if (!supabase || !authSession) return
     let isMounted = true
-    
     const init = async () => {
       try {
-        // Load session list
         await fetchSessions()
-        
-        // Check if component is still mounted
         if (!isMounted) return
-        
-        // Use setSessions callback to get the latest sessions
         setSessions(currentSessions => {
           if (currentSessions.length === 0) {
-            // If no sessions exist, create a temporary session
-            console.log('🆕 No sessions found, creating temp session')
             const tempId = `temp-${Date.now()}`
             setChatHistory(prev => ({ ...prev, [tempId]: [] }))
             setTempSessionId(tempId)
             setCurrentSessionId(tempId)
           } else if (!currentSessionId) {
-            // If sessions exist but none selected, auto-select the first one
-            console.log('📂 Found existing sessions, switching to first')
             switchSession(currentSessions[0].id)
           }
           return currentSessions
@@ -353,14 +366,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         console.error('Failed to initialize sessions:', e)
       }
     }
-    
-    // Initialize
     init()
-    
-    return () => {
-      isMounted = false
-    }
-  }, []) // Empty dependency array, execute only once on component mount
+    return () => { isMounted = false }
+  }, [supabase, authSession, fetchSessions])
 
   const value: SessionContextType = {
     sessions,

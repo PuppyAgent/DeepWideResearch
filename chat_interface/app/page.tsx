@@ -1,12 +1,16 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
+import { useAuth } from './supabase/SupabaseAuthProvider'
 import dynamic from 'next/dynamic'
 import DeepWideGrid from './DeepWideGrid'
 import MCPBar from './MCPBar'
 import HistoryToggleButton from './headercomponent/HistoryToggleButton'
 import NewChatButton from './headercomponent/NewChatButton'
 import SessionsOverlay from './headercomponent/SessionsOverlay'
+import UserMenu from './headercomponent/UserMenu'
+import DevModePanel from './headercomponent/DevModePanel'
+import { useRouter } from 'next/navigation'
 import { useSession } from './context/SessionContext'
 import type { Message as UIMessage } from '../components/component/ChatInterface'
  
@@ -25,6 +29,14 @@ interface ChatMessage {
 }
 
 export default function Home() {
+  const { getAccessToken, session } = useAuth()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (!session) {
+      router.replace('/login')
+    }
+  }, [session, router])
   // 🎯 Use SessionContext (contains session list, message history, etc.)
   const {
     sessions,
@@ -49,6 +61,7 @@ export default function Home() {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(240)
   const [isSidebarMenuOpen, setIsSidebarMenuOpen] = useState(false)
+  const [isDevModeOpen, setIsDevModeOpen] = useState(false)
   const [isCreatingSession, setIsCreatingSession] = useState(false)
   const [showCreateSuccess, setShowCreateSuccess] = useState(false)
   
@@ -81,13 +94,15 @@ export default function Home() {
     console.log('📌 currentSessionId changed to:', currentSessionId)
   }, [currentSessionId])
 
-  // Add logic to close settings panel on outside click
+  // Add logic to close settings panel and dev panel on outside click
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (isSettingsOpen) {
+      if (isSettingsOpen || isDevModeOpen) {
         const target = event.target as Element
         const settingsPanel = document.querySelector('[data-settings-panel]')
         const settingsButton = document.querySelector('[data-settings-button]')
+        const devPanel = document.querySelector('[data-dev-panel]')
+        const devButton = document.querySelector('[data-dev-button]')
         
         if (settingsPanel && settingsButton) {
           const isClickInPanel = settingsPanel.contains(target)
@@ -97,12 +112,19 @@ export default function Home() {
             setIsSettingsOpen(false)
           }
         }
+        if (isDevModeOpen && devPanel) {
+          const isClickInDev = devPanel.contains(target)
+          const isClickOnDevButton = devButton ? devButton.contains(target) : false
+          if (!isClickInDev && !isClickOnDevButton) {
+            setIsDevModeOpen(false)
+          }
+        }
       }
     }
     
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [isSettingsOpen])
+  }, [isSettingsOpen, isDevModeOpen])
   const [mcpConfig, setMcpConfig] = useState({
     services: [
       { 
@@ -318,10 +340,12 @@ export default function Home() {
 
       // Call streaming API - use environment variable or default local address
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+      const token = await getAccessToken()
       const response = await fetch(`${apiUrl}/api/research`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
         body: JSON.stringify(requestData),
       })
@@ -505,38 +529,54 @@ export default function Home() {
                 />
               </div>
 
-              {/* Center title */}
-              <div style={{ 
-                position: 'absolute',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                pointerEvents: 'none'
-              }}>
-                <img 
-                  src="/SimpleDWlogo.svg" 
-                  alt="Deep Wide Research" 
-                  style={{ 
-                    width: '32px',
-                    height: '32px',
-                    objectFit: 'contain',
-                    opacity: 0.5
-                  }} 
-                />
-                <span style={{ 
-                  fontSize: '14px', 
-                  fontWeight: '500', 
-                  color: '#666',
-                  letterSpacing: '0.3px'
-                }}>
-                  Open Deep Wide Research
-                </span>
-              </div>
+              {/* Center area intentionally left empty (logo removed) */}
 
-              {/* Right side spacing, maintain layout balance */}
-              <div style={{ width: '80px' }}></div>
+              {/* Right side: Dev Mode toggle + User menu */}
+              <div style={{ width: 'auto' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <button
+                    data-dev-button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setIsDevModeOpen(prev => !prev)
+                    }}
+                    title={isDevModeOpen ? 'Close Dev Mode' : 'Open Dev Mode'}
+                    style={{
+                      position: 'relative',
+                      width: '36px',
+                      height: '36px',
+                      borderRadius: '18px',
+                      border: isDevModeOpen ? '2px solid #4a4a4a' : '1px solid #2a2a2a',
+                      background: isDevModeOpen
+                        ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%)'
+                        : 'rgba(20, 20, 20, 0.9)',
+                      color: isDevModeOpen ? '#e6e6e6' : '#bbb',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: 'pointer',
+                      boxShadow: isDevModeOpen
+                        ? '0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.1)'
+                        : '0 2px 8px rgba(0,0,0,0.3)',
+                      transition: 'all 200ms ease',
+                      backdropFilter: 'blur(8px)',
+                      padding: 0,
+                      margin: 0,
+                    }}
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M8 16L4 12L8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      <path d="M16 8L20 12L16 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                  <UserMenu />
+                </div>
+              </div>
+            </div>
+
+            {/* Dev Mode Panel (absolute inside header container) */}
+            <div data-dev-panel>
+              <DevModePanel isOpen={isDevModeOpen} onClose={() => setIsDevModeOpen(false)} />
             </div>
 
             {/* ChatMain wrapper - fill remaining space */}

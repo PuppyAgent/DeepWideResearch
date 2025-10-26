@@ -18,9 +18,15 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, Tuple
 import asyncio
 import json
+import time
+import requests
+from jose import jwt
+import secrets
+import hashlib
+from datetime import datetime, timezone, timedelta
 
 # Try two import methods: development and deployment environments
 try:
@@ -32,6 +38,15 @@ app = FastAPI(title="PuppyResearch API", version="1.0.0")
 
 # Configure CORS to allow frontend access
 import os
+from dotenv import load_dotenv
+
+# Load environment from .env files (local development)
+try:
+    # Load root .env then service-level .env (non-overriding order)
+    load_dotenv(dotenv_path=project_root / '.env', override=False)
+    load_dotenv(dotenv_path=current_dir / '.env', override=False)
+except Exception:
+    pass
 
 # Detect if running in a production environment
 is_production = bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RENDER") or os.getenv("VERCEL"))
@@ -90,6 +105,273 @@ async def options_handler(request: Request, full_path: str):
     )
 
 
+# ===================== Supabase Auth & DB Helpers =====================
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+SUPABASE_JWKS_URL = os.getenv("SUPABASE_JWKS_URL") or (
+    f"{SUPABASE_URL.rstrip('/')}/auth/v1/keys" if SUPABASE_URL else None
+)
+SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")  # Optional: legacy HS256 secret
+
+_jwks_cache: Optional[Dict[str, Any]] = None
+
+def _get_jwks() -> Dict[str, Any]:
+    global _jwks_cache
+    if _jwks_cache is None:
+        if not SUPABASE_JWKS_URL:
+            raise HTTPException(status_code=500, detail="Server misconfigured: SUPABASE_JWKS_URL not set")
+        resp = requests.get(SUPABASE_JWKS_URL, timeout=5)
+        if not resp.ok:
+            raise HTTPException(status_code=500, detail=f"Failed to fetch JWKS: {resp.text}")
+        _jwks_cache = resp.json()
+    return _jwks_cache
+
+def _verify_supabase_jwt(authorization_header: Optional[str]) -> str:
+    if not authorization_header or not authorization_header.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Missing Authorization header")
+    token = authorization_header.split(" ", 1)[1].strip()
+    try:
+        headers = jwt.get_unverified_header(token)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token header")
+
+    alg = (headers.get("alg") or "").upper()
+    # HS256 (legacy secret)
+    if alg.startswith("HS"):
+        if not SUPABASE_JWT_SECRET:
+            raise HTTPException(status_code=500, detail="Server misconfigured: SUPABASE_JWT_SECRET not set for HS tokens")
+        try:
+            payload = jwt.decode(
+                token,
+                SUPABASE_JWT_SECRET,
+                algorithms=["HS256", "HS512"],
+                options={"verify_aud": False},
+            )
+            user_id = payload.get("sub")
+            if not user_id:
+                raise HTTPException(status_code=401, detail="Invalid token payload")
+            return user_id
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=401, detail=f"Token verification failed (HS): {str(e)}")
+
+    # RS* via JWKS
+    jwks = _get_jwks()
+    key = next((k for k in jwks.get("keys", []) if k.get("kid") == headers.get("kid")), None)
+    if key is None:
+        # Refresh JWKS once and retry
+        global _jwks_cache
+        _jwks_cache = None
+        jwks = _get_jwks()
+        key = next((k for k in jwks.get("keys", []) if k.get("kid") == headers.get("kid")), None)
+        if key is None:
+            raise HTTPException(status_code=401, detail="JWKS key not found")
+
+    rsa_key = {
+        "kty": key["kty"],
+        "kid": key["kid"],
+        "use": key.get("use", "sig"),
+        "n": key["n"],
+        "e": key["e"],
+    }
+    try:
+        payload = jwt.decode(
+            token,
+            rsa_key,
+            algorithms=["RS256", "RS512"],
+            options={"verify_aud": False},
+        )
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="Invalid token payload")
+        return user_id
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=401, detail=f"Token verification failed (RS): {str(e)}")
+
+def _supabase_auth_headers() -> Dict[str, str]:
+    if not SUPABASE_SERVICE_ROLE_KEY:
+        raise HTTPException(status_code=500, detail="Server misconfigured: SUPABASE_SERVICE_ROLE_KEY not set")
+    return {
+        "apikey": SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+    }
+
+
+# ===================== API Key Helpers =====================
+API_KEY_PREFIX = "dwr_"  # Key format: dwr_<prefix>_<secret>
+
+def _hash_api_key_secret(secret: str, salt: str) -> str:
+    data = (salt + secret).encode("utf-8")
+    return hashlib.sha256(data).hexdigest()
+
+def _parse_api_key_str(api_key: str) -> Tuple[str, str]:
+    if not api_key:
+        raise HTTPException(status_code=401, detail="Missing API key")
+    key = api_key.strip()
+    if key.lower().startswith("apikey "):
+        key = key.split(" ", 1)[1].strip()
+    if not key.startswith(API_KEY_PREFIX):
+        raise HTTPException(status_code=401, detail="Invalid API key format")
+    parts = key[len(API_KEY_PREFIX):].split("_", 1)
+    if len(parts) != 2 or not parts[0] or not parts[1]:
+        raise HTTPException(status_code=401, detail="Invalid API key format")
+    return parts[0], parts[1]
+
+def _supabase_rest_get(path: str, params: Optional[Dict[str, str]] = None, timeout: int = 5):
+    if not SUPABASE_URL:
+        raise HTTPException(status_code=500, detail="Server misconfigured: SUPABASE_URL not set")
+    url = f"{SUPABASE_URL.rstrip('/')}{path}"
+    resp = requests.get(url, headers=_supabase_auth_headers(), params=params, timeout=timeout)
+    return resp
+
+def _supabase_rest_patch(path: str, json_body: Dict[str, Any], timeout: int = 5):
+    if not SUPABASE_URL:
+        raise HTTPException(status_code=500, detail="Server misconfigured: SUPABASE_URL not set")
+    url = f"{SUPABASE_URL.rstrip('/')}{path}"
+    headers = _supabase_auth_headers()
+    headers["Prefer"] = "return=representation"
+    resp = requests.patch(url, headers=headers, json=json_body, timeout=timeout)
+    return resp
+
+def _supabase_rest_post(path: str, json_body: Dict[str, Any], timeout: int = 5):
+    if not SUPABASE_URL:
+        raise HTTPException(status_code=500, detail="Server misconfigured: SUPABASE_URL not set")
+    url = f"{SUPABASE_URL.rstrip('/')}{path}"
+    headers = _supabase_auth_headers()
+    headers["Prefer"] = "return=representation"
+    resp = requests.post(url, headers=headers, json=json_body, timeout=timeout)
+    return resp
+
+def _fetch_api_key_record(prefix: str) -> Optional[Dict[str, Any]]:
+    resp = _supabase_rest_get(
+        "/rest/v1/api_keys",
+        params={
+            "prefix": f"eq.{prefix}",
+            "select": "id,user_id,prefix,salt,secret_hash,revoked_at,expires_at,last_used_at,scopes"
+        },
+    )
+    if not resp.ok:
+        raise HTTPException(status_code=500, detail=f"Supabase api_keys error: {resp.text}")
+    arr = resp.json()
+    if isinstance(arr, list) and arr:
+        return arr[0]
+    return None
+
+def _touch_api_key_last_used(key_id: str) -> None:
+    try:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        _supabase_rest_patch(f"/rest/v1/api_keys?id=eq.{key_id}", {"last_used_at": now_iso})
+    except Exception:
+        pass
+
+def _verify_api_key(api_key: str) -> Tuple[str, Dict[str, Any]]:
+    prefix, secret = _parse_api_key_str(api_key)
+    record = _fetch_api_key_record(prefix)
+    if not record:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    if record.get("revoked_at"):
+        raise HTTPException(status_code=401, detail="API key revoked")
+    expires_at = record.get("expires_at")
+    if expires_at:
+        try:
+            exp_dt = datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+            if exp_dt < datetime.now(timezone.utc):
+                raise HTTPException(status_code=401, detail="API key expired")
+        except HTTPException:
+            raise
+        except Exception:
+            # If parsing fails, be conservative and reject
+            raise HTTPException(status_code=401, detail="API key expired")
+
+    salt = record.get("salt") or ""
+    expected_hash = record.get("secret_hash") or ""
+    if not salt or not expected_hash:
+        raise HTTPException(status_code=401, detail="API key invalid")
+    if _hash_api_key_secret(secret, salt) != expected_hash:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+
+    # Best-effort update last_used_at
+    try:
+        _touch_api_key_last_used(str(record.get("id")))
+    except Exception:
+        pass
+
+    user_id = str(record.get("user_id"))
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid API key")
+    return user_id, record
+
+def _resolve_user(headers: Dict[str, str]) -> Tuple[str, str, Optional[Dict[str, Any]]]:
+    # Priority: Bearer JWT, then Authorization: ApiKey, then X-API-Key
+    auth_header = headers.get("authorization") or headers.get("Authorization")
+    if auth_header:
+        lower = auth_header.lower()
+        if lower.startswith("bearer "):
+            return _verify_supabase_jwt(auth_header), "jwt", None
+        if lower.startswith("apikey "):
+            user_id, rec = _verify_api_key(auth_header)
+            return user_id, "api_key", rec
+    x_api_key = headers.get("x-api-key") or headers.get("X-API-Key")
+    if x_api_key:
+        user_id, rec = _verify_api_key(x_api_key)
+        return user_id, "api_key", rec
+    raise HTTPException(status_code=401, detail="Missing Authorization or X-API-Key header")
+
+def _get_credit_balance(user_id: str) -> int:
+    if not SUPABASE_URL:
+        raise HTTPException(status_code=500, detail="Server misconfigured: SUPABASE_URL not set")
+    url = f"{SUPABASE_URL}/rest/v1/credit_balance"
+    params = {"user_id": f"eq.{user_id}", "select": "balance"}
+    resp = requests.get(url, headers=_supabase_auth_headers(), params=params, timeout=5)
+    if not resp.ok:
+        raise HTTPException(status_code=500, detail=f"Supabase balance error: {resp.text}")
+    arr = resp.json()
+    if isinstance(arr, list) and arr:
+        bal = arr[0].get("balance", 0)
+        try:
+            return int(bal)
+        except Exception:
+            return 0
+    return 0
+
+def _consume_credits(user_id: str, units: int, request_id: str, meta: Dict[str, Any]) -> int:
+    if not SUPABASE_URL:
+        raise HTTPException(status_code=500, detail="Server misconfigured: SUPABASE_URL not set")
+    url = f"{SUPABASE_URL}/rest/v1/rpc/sp_consume_credits"
+    payload = {
+        "p_user_id": user_id,
+        "p_units": units,
+        "p_request_id": request_id,
+        "p_meta": meta or {},
+    }
+    resp = requests.post(url, headers=_supabase_auth_headers(), json=payload, timeout=10)
+    if not resp.ok:
+        # Map insufficient credits to 402
+        if "INSUFFICIENT_CREDITS" in resp.text:
+            raise HTTPException(status_code=402, detail="Insufficient credits")
+        raise HTTPException(status_code=500, detail=f"Supabase consume error: {resp.text}")
+    try:
+        return int(resp.json())
+    except Exception:
+        return 0
+
+def _compute_credits_from_params(deep: float, wide: float) -> int:
+    """Compute credits as: 4 + deep * wide * 16, then clamp to [5, 20]."""
+    try:
+        raw = 4.0 + (float(deep) * float(wide) * 16.0)
+    except Exception:
+        raw = 4.0
+    units = int(round(raw))
+    if units < 5:
+        units = 5
+    if units > 20:
+        units = 20
+    return units
+
 class Message(BaseModel):
     """Message model - Standard OpenAI format"""
     role: str  # "user", "assistant", or "system"
@@ -107,12 +389,14 @@ class ResearchMessage(BaseModel):
     query: str  # User's query text
     deepwide: DeepWideParams = DeepWideParams()  # Depth/breadth parameter object
     mcp: Dict[str, List[str]] = {}  # MCP config: {service_name: [tool list]}
+    thread_id: Optional[str] = None  # Optional: link consumption to a thread
 
 
 class ResearchRequest(BaseModel):
     """Research request model"""
     message: ResearchMessage  # Now an object instead of a string
     history: Optional[List[Message]] = None
+    request_id: Optional[str] = None
 
 
 class ResearchResponse(BaseModel):
@@ -180,10 +464,14 @@ async def research_stream_generator(request: ResearchRequest):
 
 
 @app.post("/api/research")
-async def research(request: ResearchRequest):
+async def research(request: ResearchRequest, req: Request):
     """Execute deep research - streaming response"""
-    return StreamingResponse(
-        research_stream_generator(request),
+    # Auth (JWT or API Key)
+    user_id, auth_method, api_key_rec = _resolve_user(dict(req.headers))
+
+    stream = research_stream_generator(request)
+    response = StreamingResponse(
+        stream,
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -191,6 +479,164 @@ async def research(request: ResearchRequest):
             "X-Accel-Buffering": "no",
         }
     )
+
+    # After stream completes, consume variable credits based on params
+    async def on_close():
+        try:
+            rid = request.request_id or f"{user_id}-{int(time.time()*1000)}"
+            deep_val = float(getattr(request.message.deepwide, "deep", 0.5))
+            wide_val = float(getattr(request.message.deepwide, "wide", 0.5))
+            units = _compute_credits_from_params(deep_val, wide_val)
+            meta = {
+                "endpoint": "/api/research",
+                "version": "1.0.0",
+                "deep": deep_val,
+                "wide": wide_val,
+                "thread_id": getattr(request.message, "thread_id", None),
+                "auth": auth_method,
+                "api_key_prefix": (api_key_rec.get("prefix") if api_key_rec else None),
+            }
+            _consume_credits(user_id=user_id, units=units, request_id=rid, meta=meta)
+        except HTTPException as e:
+            # log and swallow to not break client
+            print(f"[consume_credits] HTTPException: {e.status_code} {e.detail}")
+        except Exception as e:
+            print(f"[consume_credits] Error: {e}")
+
+    response.background = None  # ensure streaming works; we'll await completion below
+    # FastAPI doesn't expose on_complete hook for streams; best-effort: schedule task
+    asyncio.create_task(on_close())
+    return response
+
+
+@app.get("/api/credits/balance")
+async def get_balance(req: Request):
+    user_id, _, _ = _resolve_user(dict(req.headers))
+    balance = _get_credit_balance(user_id)
+    return {"user_id": user_id, "balance": balance}
+
+
+# ===================== API Key Management Endpoints =====================
+class CreateApiKeyRequest(BaseModel):
+    name: Optional[str] = None
+    expires_in_days: Optional[int] = None
+    scopes: Optional[List[str]] = None
+
+class CreateApiKeyResponse(BaseModel):
+    id: str
+    api_key: str
+    prefix: str
+    name: Optional[str] = None
+    expires_at: Optional[str] = None
+
+class ApiKeyItem(BaseModel):
+    id: str
+    prefix: str
+    name: Optional[str] = None
+    created_at: Optional[str] = None
+    last_used_at: Optional[str] = None
+    expires_at: Optional[str] = None
+    revoked_at: Optional[str] = None
+    scopes: List[str] = []
+    api_key: Optional[str] = None
+
+class ListApiKeysResponse(BaseModel):
+    keys: List[ApiKeyItem]
+
+@app.post("/api/keys", response_model=CreateApiKeyResponse)
+async def create_api_key(body: CreateApiKeyRequest, req: Request):
+    # Only JWT-authenticated users can create keys
+    user_id = _verify_supabase_jwt(req.headers.get("Authorization"))
+
+    name = (body.name or "default").strip() or "default"
+    expires_at_iso: Optional[str] = None
+    if body.expires_in_days and body.expires_in_days > 0:
+        expires_dt = datetime.now(timezone.utc) + timedelta(days=int(body.expires_in_days))
+        expires_at_iso = expires_dt.isoformat()
+
+    prefix = secrets.token_urlsafe(6).replace("-", "").replace("_", "").upper()[:8]
+    secret = secrets.token_urlsafe(32)
+    salt = secrets.token_hex(16)
+    secret_hash = _hash_api_key_secret(secret, salt)
+    scopes = body.scopes or ["research:invoke"]
+
+    insert_payload = {
+        "user_id": user_id,
+        "name": name,
+        "prefix": prefix,
+        "salt": salt,
+        "secret_hash": secret_hash,
+        "scopes": scopes,
+        # Full API key as requested (note: stored in plaintext)
+        "secret_plain": f"{API_KEY_PREFIX}{prefix}_{secret}",
+        **({"expires_at": expires_at_iso} if expires_at_iso else {}),
+    }
+    resp = _supabase_rest_post("/rest/v1/api_keys", insert_payload)
+    if not resp.ok:
+        raise HTTPException(status_code=500, detail=f"Failed to create API key: {resp.text}")
+    rec = resp.json()[0]
+    api_key_plain = f"{API_KEY_PREFIX}{prefix}_{secret}"
+    return CreateApiKeyResponse(
+        id=str(rec.get("id")),
+        api_key=api_key_plain,
+        prefix=prefix,
+        name=name,
+        expires_at=expires_at_iso,
+    )
+
+@app.get("/api/keys", response_model=ListApiKeysResponse)
+async def list_api_keys(req: Request):
+    # JWT required for listing
+    user_id = _verify_supabase_jwt(req.headers.get("Authorization"))
+    resp = _supabase_rest_get(
+        "/rest/v1/api_keys",
+        params={
+            "user_id": f"eq.{user_id}",
+            "select": "id,prefix,name,created_at,last_used_at,expires_at,revoked_at,scopes,secret_plain",
+            "order": "created_at.desc",
+        },
+    )
+    if not resp.ok:
+        raise HTTPException(status_code=500, detail=f"Failed to list API keys: {resp.text}")
+    items = []
+    for row in resp.json():
+        items.append(ApiKeyItem(
+            id=str(row.get("id")),
+            prefix=row.get("prefix"),
+            name=row.get("name"),
+            created_at=row.get("created_at"),
+            last_used_at=row.get("last_used_at"),
+            expires_at=row.get("expires_at"),
+            revoked_at=row.get("revoked_at"),
+            scopes=row.get("scopes") or [],
+            api_key=row.get("secret_plain"),
+        ))
+    return ListApiKeysResponse(keys=items)
+
+@app.delete("/api/keys/{key_id}")
+async def revoke_api_key(key_id: str, req: Request):
+    # JWT required for revocation
+    user_id = _verify_supabase_jwt(req.headers.get("Authorization"))
+    # Ensure the key belongs to the user
+    check = _supabase_rest_get(
+        "/rest/v1/api_keys",
+        params={
+            "id": f"eq.{key_id}",
+            "user_id": f"eq.{user_id}",
+            "select": "id",
+        },
+    )
+    if not check.ok:
+        raise HTTPException(status_code=500, detail=f"Failed to fetch API key: {check.text}")
+    arr = check.json()
+    if not arr:
+        raise HTTPException(status_code=404, detail="API key not found")
+    # Revoke by setting revoked_at
+    now_iso = datetime.now(timezone.utc).isoformat()
+    resp = _supabase_rest_patch(f"/rest/v1/api_keys?id=eq.{key_id}", {"revoked_at": now_iso})
+    if not resp.ok:
+        raise HTTPException(status_code=500, detail=f"Failed to revoke API key: {resp.text}")
+    return {"id": key_id, "revoked_at": now_iso}
 
 
 class MCPTestRequest(BaseModel):
@@ -289,17 +735,20 @@ async def test_mcp_services(request: MCPTestRequest):
 if __name__ == "__main__":
     import uvicorn
     
+    port = int(os.getenv("PORT", "8000"))
+    host = os.getenv("HOST", "0.0.0.0")
+    
     print("="*80)
     print("🚀 Starting PuppyResearch API Server")
     print("="*80)
-    print("📡 Server will be available at: http://localhost:8000")
-    print("📚 API docs at: http://localhost:8000/docs")
+    print(f"📡 Server will be available at: http://localhost:{port}")
+    print(f"📚 API docs at: http://localhost:{port}/docs")
     print("="*80)
     
     uvicorn.run(
         app,
-        host="0.0.0.0",
-        port=8000,
+        host=host,
+        port=port,
         log_level="info"
     )
 

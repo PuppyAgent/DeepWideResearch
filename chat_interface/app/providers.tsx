@@ -1,12 +1,15 @@
 'use client'
 
 import { SessionProvider } from './context/SessionContext'
+import { SupabaseAuthProvider } from './supabase/SupabaseAuthProvider'
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <SessionProvider>
-      {children}
-    </SessionProvider>
+    <SupabaseAuthProvider>
+      <SessionProvider>
+        {children}
+      </SessionProvider>
+    </SupabaseAuthProvider>
   )
 }
 
