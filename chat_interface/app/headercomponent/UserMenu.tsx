@@ -4,36 +4,9 @@ import React, { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../supabase/SupabaseAuthProvider'
 
 export default function UserMenu() {
-  const { session, getAccessToken, signOut } = useAuth()
-  const [balance, setBalance] = useState<number | null>(null)
-  const [loading, setLoading] = useState(false)
+  const { session, signOut } = useAuth()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
-
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-
-  useEffect(() => {
-    let active = true
-    const load = async () => {
-      if (!session) { setBalance(null); return }
-      setLoading(true)
-      try {
-        const token = await getAccessToken()
-        const res = await fetch(`${apiBase}/api/credits/balance`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
-        })
-        if (!res.ok) throw new Error('Failed to load balance')
-        const data = await res.json()
-        if (active) setBalance(Number(data?.balance ?? 0))
-      } catch (e) {
-        if (active) setBalance(null)
-      } finally {
-        if (active) setLoading(false)
-      }
-    }
-    load()
-    return () => { active = false }
-  }, [session, getAccessToken, apiBase])
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -47,22 +20,18 @@ export default function UserMenu() {
   if (!session) return null
 
   const email = session.user.email || ''
-  const initial = (email || session.user.user_metadata?.name || 'U').trim().charAt(0).toUpperCase()
+  const userName = session.user.user_metadata?.name || session.user.user_metadata?.full_name || email.split('@')[0] || 'User'
+  const initial = userName.trim().charAt(0).toUpperCase()
 
   return (
     <div ref={ref} style={{ position: 'relative', display: 'inline-flex' }}>
-      <div style={pillStyle}>
-        <button
-          title={email}
-          onClick={() => setOpen(v => !v)}
-          style={avatarButtonStyle}
-        >
-          <span style={avatarInnerStyle}>{initial}</span>
-        </button>
-        <div style={creditTextStyle}>
-          {loading ? '—' : `${balance ?? '—'}`}
-        </div>
-      </div>
+      <button
+        title={email}
+        onClick={() => setOpen(v => !v)}
+        style={avatarButtonStyle}
+      >
+        <span style={avatarInnerStyle}>{initial}</span>
+      </button>
 
       <div
         data-user-menu-panel
@@ -87,6 +56,32 @@ export default function UserMenu() {
         }}
         aria-hidden={!open}
       >
+        <div style={{
+          padding: '8px 12px',
+          borderBottom: '1px solid #2a2a2a',
+          marginBottom: 4
+        }}>
+          <div style={{
+            color: '#e6e6e6',
+            fontSize: 14,
+            fontWeight: 600,
+            marginBottom: 4,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}>
+            {userName}
+          </div>
+          <div style={{
+            color: '#888',
+            fontSize: 12,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap'
+          }}>
+            {email}
+          </div>
+        </div>
         <MenuItem onClick={() => { console.log('Recharge clicked') }}>Recharge</MenuItem>
         <MenuItem onClick={() => { signOut() }}>Logout</MenuItem>
       </div>
@@ -126,41 +121,23 @@ function MenuItem({ onClick, children }: { onClick: () => void; children: React.
 }
 
 const avatarButtonStyle: React.CSSProperties = {
-  width: 28,
-  height: 28,
-  borderRadius: 14,
+  width: 36,
+  height: 36,
+  borderRadius: 18,
   border: '1px solid #2a2a2a',
   background: 'linear-gradient(135deg, rgba(60,60,60,0.6) 0%, rgba(40,40,40,0.6) 100%)',
   padding: 0,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
-  cursor: 'pointer'
+  cursor: 'pointer',
+  transition: 'all 200ms ease'
 }
 
 const avatarInnerStyle: React.CSSProperties = {
   color: '#eee',
-  fontSize: 13,
-  fontWeight: 700,
-}
-
-const pillStyle: React.CSSProperties = {
-  height: 36,
-  display: 'flex',
-  alignItems: 'center',
-  gap: 8,
-  padding: '0 10px 0 4px',
-  borderRadius: 18,
-  border: '1px solid #2a2a2a',
-  background: 'rgba(20,20,20,0.9)'
-}
-
-const creditTextStyle: React.CSSProperties = {
-  color: '#ddd',
   fontSize: 14,
-  lineHeight: '12px',
-  minWidth: 24,
-  textAlign: 'right'
+  fontWeight: 700,
 }
 
 

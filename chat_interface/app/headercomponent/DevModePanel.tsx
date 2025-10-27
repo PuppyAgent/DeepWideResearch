@@ -31,6 +31,9 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
   const [languageByKey, setLanguageByKey] = React.useState<Record<string, 'curl' | 'node' | 'python'>>({})
   const [copiedKeyId, setCopiedKeyId] = React.useState<string | null>(null)
   const [copiedSnippetFor, setCopiedSnippetFor] = React.useState<string | null>(null)
+  const [hoveredRowId, setHoveredRowId] = React.useState<string | null>(null)
+  const [refreshing, setRefreshing] = React.useState(false)
+  const hasLoadedRef = React.useRef(false)
   const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
   const billingUrl = process.env.NEXT_PUBLIC_BILLING_URL
 
@@ -93,28 +96,41 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
     }
   }, [apiBase, getAccessToken])
 
-  React.useEffect(() => {
-    if (isOpen) {
-      fetchKeys()
-      ;(async () => {
-        setBalanceLoading(true)
-        try {
-          const token = await getAccessToken()
-          const res = await fetch(`${apiBase}/api/credits/balance`, {
-            headers: { 'Authorization': token ? `Bearer ${token}` : '' }
-          })
-          if (res.ok) {
-            const data = await res.json()
-            setBalance(typeof data.balance === 'number' ? data.balance : null)
-          }
-        } catch (e) {
-          console.warn('Failed to load balance', e)
-        } finally {
-          setBalanceLoading(false)
-        }
-      })()
+  const fetchBalance = React.useCallback(async () => {
+    setBalanceLoading(true)
+    try {
+      const token = await getAccessToken()
+      const res = await fetch(`${apiBase}/api/credits/balance`, {
+        headers: { 'Authorization': token ? `Bearer ${token}` : '' }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setBalance(typeof data.balance === 'number' ? data.balance : null)
+      }
+    } catch (e) {
+      console.warn('Failed to load balance', e)
+    } finally {
+      setBalanceLoading(false)
     }
-  }, [isOpen, fetchKeys])
+  }, [apiBase, getAccessToken])
+
+  React.useEffect(() => {
+    if (isOpen && !hasLoadedRef.current) {
+      hasLoadedRef.current = true
+      fetchKeys()
+      fetchBalance()
+    }
+  }, [isOpen, fetchKeys, fetchBalance])
+
+  const refreshAll = React.useCallback(async () => {
+    if (refreshing) return
+    setRefreshing(true)
+    try {
+      await Promise.all([fetchKeys(), fetchBalance()])
+    } finally {
+      setRefreshing(false)
+    }
+  }, [refreshing, fetchKeys, fetchBalance])
 
   const createKey = async () => {
     if (creating) return
@@ -261,9 +277,19 @@ run().catch(console.error);`
               {balanceLoading ? '…' : (balance ?? '—')}
             </span>
           </div>
-          <button onClick={onAddCredits} style={{ height: 32, padding: '0 12px', borderRadius: 8, border: '1px solid rgba(69,153,223,0.7)', background: 'linear-gradient(180deg, #4FA0E2 0%, #3E87C7 100%)', color: '#ffffff', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 12px rgba(69,153,223,0.25)' }}>Add credits</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button onClick={refreshAll} disabled={refreshing} title="Refresh" aria-label="Refresh"
+              style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #2a2a2a', background: '#151515', color: refreshing ? '#888' : '#cfcfcf', cursor: refreshing ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }}>
+                <path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+            <button onClick={onAddCredits} style={{ height: 32, padding: '0 12px', borderRadius: 8, border: '1px solid rgba(69,153,223,0.7)', background: 'linear-gradient(180deg, #4FA0E2 0%, #3E87C7 100%)', color: '#ffffff', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 12px rgba(69,153,223,0.25)', fontSize: 12 }}>Add More Credits</button>
+          </div>
         </div>
       </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
       {/* Keys List */}
       <div style={{ marginBottom: '16px' }}>
@@ -274,9 +300,8 @@ run().catch(console.error);`
           )}
           {!loading && keys.length > 0 && (
             <div style={{ border: '1px solid #2a2a2a', borderRadius: 10, overflow: 'hidden', background: '#121212' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 96px', padding: '10px 12px', color: '#9aa0a6', fontSize: 12, background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid #2a2a2a' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr', padding: '10px 12px', color: '#9aa0a6', fontSize: 12, background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid #2a2a2a' }}>
                 <div>Key</div>
-                <div style={{ textAlign: 'center' }}>Actions</div>
               </div>
               {keys.map(k => {
                 const expanded = expandedId === k.id
@@ -286,11 +311,13 @@ run().catch(console.error);`
                 return (
                   <React.Fragment key={k.id}>
                     <div
-                      style={{ display: 'grid', gridTemplateColumns: '1fr 96px', alignItems: 'center', padding: '10px 12px', borderTop: '1px solid #2a2a2a', cursor: 'pointer' }}
+                      style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', padding: '10px 12px', borderTop: '1px solid #2a2a2a', cursor: 'pointer' }}
+                      onMouseEnter={() => setHoveredRowId(k.id)}
+                      onMouseLeave={() => setHoveredRowId(prev => (prev === k.id ? null : prev))}
                       onClick={() => setExpandedId(expanded ? null : k.id)}
                     >
                       <code style={{ color: '#e0e0e0', fontSize: '12px', wordBreak: 'break-all' }}>{displayKey}</code>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', visibility: hoveredRowId === k.id ? 'visible' : 'hidden' }}>
                         <button
                           onClick={async (e) => {
                             e.stopPropagation()

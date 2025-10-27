@@ -27,6 +27,7 @@ from jose import jwt
 import secrets
 import hashlib
 from datetime import datetime, timezone, timedelta
+import logging
 
 # Try two import methods: development and deployment environments
 try:
@@ -35,6 +36,10 @@ except ImportError:
     from engine import run_deep_research, run_deep_research_stream, Configuration
 
 app = FastAPI(title="PuppyResearch API", version="1.0.0")
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Configure CORS to allow frontend access
 import os
@@ -546,7 +551,12 @@ class ListApiKeysResponse(BaseModel):
 @app.post("/api/keys", response_model=CreateApiKeyResponse)
 async def create_api_key(body: CreateApiKeyRequest, req: Request):
     # Only JWT-authenticated users can create keys
-    user_id = _verify_supabase_jwt(req.headers.get("Authorization"))
+    try:
+        user_id = _verify_supabase_jwt(req.headers.get("Authorization"))
+        logger.info(f"Creating API key for user: {user_id}")
+    except Exception as e:
+        logger.error(f"JWT verification failed: {e}")
+        raise
 
     name = (body.name or "default").strip() or "default"
     expires_at_iso: Optional[str] = None
@@ -567,56 +577,81 @@ async def create_api_key(body: CreateApiKeyRequest, req: Request):
         "salt": salt,
         "secret_hash": secret_hash,
         "scopes": scopes,
-        # Full API key as requested (note: stored in plaintext)
-        "secret_plain": f"{API_KEY_PREFIX}{prefix}_{secret}",
         **({"expires_at": expires_at_iso} if expires_at_iso else {}),
     }
-    resp = _supabase_rest_post("/rest/v1/api_keys", insert_payload)
-    if not resp.ok:
-        raise HTTPException(status_code=500, detail=f"Failed to create API key: {resp.text}")
-    rec = resp.json()[0]
-    api_key_plain = f"{API_KEY_PREFIX}{prefix}_{secret}"
-    return CreateApiKeyResponse(
-        id=str(rec.get("id")),
-        api_key=api_key_plain,
-        prefix=prefix,
-        name=name,
-        expires_at=expires_at_iso,
-    )
+    logger.info(f"Inserting API key with payload keys: {insert_payload.keys()}")
+    try:
+        resp = _supabase_rest_post("/rest/v1/api_keys", insert_payload)
+        if not resp.ok:
+            logger.error(f"Supabase POST failed: {resp.status_code} - {resp.text}")
+            raise HTTPException(status_code=500, detail=f"Failed to create API key: {resp.text}")
+        rec = resp.json()[0]
+        api_key_plain = f"{API_KEY_PREFIX}{prefix}_{secret}"
+        logger.info(f"API key created successfully with id: {rec.get('id')}")
+        return CreateApiKeyResponse(
+            id=str(rec.get("id")),
+            api_key=api_key_plain,
+            prefix=prefix,
+            name=name,
+            expires_at=expires_at_iso,
+        )
+    except Exception as e:
+        logger.error(f"Error creating API key: {str(e)}", exc_info=True)
+        raise
 
 @app.get("/api/keys", response_model=ListApiKeysResponse)
 async def list_api_keys(req: Request):
     # JWT required for listing
-    user_id = _verify_supabase_jwt(req.headers.get("Authorization"))
-    resp = _supabase_rest_get(
-        "/rest/v1/api_keys",
-        params={
-            "user_id": f"eq.{user_id}",
-            "select": "id,prefix,name,created_at,last_used_at,expires_at,revoked_at,scopes,secret_plain",
-            "order": "created_at.desc",
-        },
-    )
-    if not resp.ok:
-        raise HTTPException(status_code=500, detail=f"Failed to list API keys: {resp.text}")
-    items = []
-    for row in resp.json():
-        items.append(ApiKeyItem(
-            id=str(row.get("id")),
-            prefix=row.get("prefix"),
-            name=row.get("name"),
-            created_at=row.get("created_at"),
-            last_used_at=row.get("last_used_at"),
-            expires_at=row.get("expires_at"),
-            revoked_at=row.get("revoked_at"),
-            scopes=row.get("scopes") or [],
-            api_key=row.get("secret_plain"),
-        ))
-    return ListApiKeysResponse(keys=items)
+    try:
+        user_id = _verify_supabase_jwt(req.headers.get("Authorization"))
+        logger.info(f"Listing API keys for user: {user_id}")
+    except Exception as e:
+        logger.error(f"JWT verification failed: {e}")
+        raise
+    
+    try:
+        resp = _supabase_rest_get(
+            "/rest/v1/api_keys",
+            params={
+                "user_id": f"eq.{user_id}",
+                "revoked_at": "is.null",  # Only return non-revoked keys
+                "select": "id,prefix,name,created_at,last_used_at,expires_at,revoked_at,scopes",
+                "order": "created_at.desc",
+            },
+        )
+        if not resp.ok:
+            logger.error(f"Supabase GET failed: {resp.status_code} - {resp.text}")
+            raise HTTPException(status_code=500, detail=f"Failed to list API keys: {resp.text}")
+        items = []
+        for row in resp.json():
+            # For security, only show the prefix after creation (full key only returned on creation)
+            items.append(ApiKeyItem(
+                id=str(row.get("id")),
+                prefix=row.get("prefix"),
+                name=row.get("name"),
+                created_at=row.get("created_at"),
+                last_used_at=row.get("last_used_at"),
+                expires_at=row.get("expires_at"),
+                revoked_at=row.get("revoked_at"),
+                scopes=row.get("scopes") or [],
+                api_key=None,  # Don't return full key after creation for security
+            ))
+        logger.info(f"Listed {len(items)} API keys")
+        return ListApiKeysResponse(keys=items)
+    except Exception as e:
+        logger.error(f"Error listing API keys: {str(e)}", exc_info=True)
+        raise
 
 @app.delete("/api/keys/{key_id}")
 async def revoke_api_key(key_id: str, req: Request):
     # JWT required for revocation
-    user_id = _verify_supabase_jwt(req.headers.get("Authorization"))
+    try:
+        user_id = _verify_supabase_jwt(req.headers.get("Authorization"))
+        logger.info(f"Revoking API key {key_id} for user: {user_id}")
+    except Exception as e:
+        logger.error(f"JWT verification failed: {e}")
+        raise
+    
     # Ensure the key belongs to the user
     check = _supabase_rest_get(
         "/rest/v1/api_keys",
@@ -627,15 +662,21 @@ async def revoke_api_key(key_id: str, req: Request):
         },
     )
     if not check.ok:
+        logger.error(f"Failed to fetch API key for verification: {check.status_code} - {check.text}")
         raise HTTPException(status_code=500, detail=f"Failed to fetch API key: {check.text}")
     arr = check.json()
     if not arr:
+        logger.warning(f"API key {key_id} not found or doesn't belong to user {user_id}")
         raise HTTPException(status_code=404, detail="API key not found")
+    
     # Revoke by setting revoked_at
     now_iso = datetime.now(timezone.utc).isoformat()
     resp = _supabase_rest_patch(f"/rest/v1/api_keys?id=eq.{key_id}", {"revoked_at": now_iso})
     if not resp.ok:
+        logger.error(f"Failed to revoke API key: {resp.status_code} - {resp.text}")
         raise HTTPException(status_code=500, detail=f"Failed to revoke API key: {resp.text}")
+    
+    logger.info(f"API key {key_id} revoked successfully")
     return {"id": key_id, "revoked_at": now_iso}
 
 

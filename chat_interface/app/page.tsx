@@ -64,6 +64,8 @@ export default function Home() {
   const [isDevModeOpen, setIsDevModeOpen] = useState(false)
   const [isCreatingSession, setIsCreatingSession] = useState(false)
   const [showCreateSuccess, setShowCreateSuccess] = useState(false)
+  const [balance, setBalance] = useState<number | null>(null)
+  const [balanceLoading, setBalanceLoading] = useState(false)
   
   // 📜 Cache streaming history for each session (session_id -> streamingHistory[])
   const [sessionStreamingCache, setSessionStreamingCache] = useState<Record<string, string[]>>({})
@@ -144,6 +146,31 @@ export default function Home() {
     ]
   })
 
+
+  // Fetch credits balance
+  React.useEffect(() => {
+    let active = true
+    const loadBalance = async () => {
+      if (!session) { setBalance(null); return }
+      setBalanceLoading(true)
+      try {
+        const token = await getAccessToken()
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+        const res = await fetch(`${apiBase}/api/credits/balance`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        })
+        if (!res.ok) throw new Error('Failed to load balance')
+        const data = await res.json()
+        if (active) setBalance(Number(data?.balance ?? 0))
+      } catch (e) {
+        if (active) setBalance(null)
+      } finally {
+        if (active) setBalanceLoading(false)
+      }
+    }
+    loadBalance()
+    return () => { active = false }
+  }, [session, getAccessToken])
 
   // Add debug info - show current parameter state
   React.useEffect(() => {
@@ -531,10 +558,13 @@ export default function Home() {
 
               {/* Center area intentionally left empty (logo removed) */}
 
-              {/* Right side: Dev Mode toggle + User menu */}
+              {/* Right side: User menu | Credits + Dev Mode pill */}
               <div style={{ width: 'auto' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <button
+                  <UserMenu />
+                  
+                  {/* Dev Mode + Credits Pill */}
+                  <div 
                     data-dev-button
                     onClick={(e) => {
                       e.stopPropagation()
@@ -542,34 +572,67 @@ export default function Home() {
                     }}
                     title={isDevModeOpen ? 'Close Dev Mode' : 'Open Dev Mode'}
                     style={{
-                      position: 'relative',
-                      width: '36px',
                       height: '36px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '0 12px 0 4px',
                       borderRadius: '18px',
+                      border: '1px solid #2a2a2a',
+                      background: 'rgba(20,20,20,0.9)',
+                      backdropFilter: 'blur(8px)',
+                      cursor: 'pointer',
+                      transition: 'all 200ms ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!isDevModeOpen) {
+                        e.currentTarget.style.borderColor = '#3a3a3a'
+                        e.currentTarget.style.background = 'rgba(25,25,25,0.9)'
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!isDevModeOpen) {
+                        e.currentTarget.style.borderColor = '#2a2a2a'
+                        e.currentTarget.style.background = 'rgba(20,20,20,0.9)'
+                      }
+                    }}
+                  >
+                    {/* Dev Mode Icon */}
+                    <div style={{
+                      width: '28px',
+                      height: '28px',
+                      borderRadius: '14px',
                       border: isDevModeOpen ? '2px solid #4a4a4a' : '1px solid #2a2a2a',
                       background: isDevModeOpen
                         ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%)'
-                        : 'rgba(20, 20, 20, 0.9)',
+                        : 'rgba(30, 30, 30, 0.9)',
                       color: isDevModeOpen ? '#e6e6e6' : '#bbb',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      cursor: 'pointer',
                       boxShadow: isDevModeOpen
                         ? '0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.1)'
                         : '0 2px 8px rgba(0,0,0,0.3)',
                       transition: 'all 200ms ease',
-                      backdropFilter: 'blur(8px)',
-                      padding: 0,
-                      margin: 0,
-                    }}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M8 16L4 12L8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M16 8L20 12L16 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </button>
-                  <UserMenu />
+                    }}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M8 16L4 12L8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        <path d="M16 8L20 12L16 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                      </svg>
+                    </div>
+                    
+                    {/* Credits Display */}
+                    <div style={{
+                      color: '#4599DF',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      lineHeight: '12px',
+                      minWidth: '24px',
+                      textAlign: 'left'
+                    }}>
+                      {balanceLoading ? '—' : `${balance ?? '—'}`}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
