@@ -544,6 +544,7 @@ class ApiKeyItem(BaseModel):
     revoked_at: Optional[str] = None
     scopes: List[str] = []
     api_key: Optional[str] = None
+    used_credits: Optional[int] = 0
 
 class ListApiKeysResponse(BaseModel):
     keys: List[ApiKeyItem]
@@ -577,6 +578,8 @@ async def create_api_key(body: CreateApiKeyRequest, req: Request):
         "salt": salt,
         "secret_hash": secret_hash,
         "scopes": scopes,
+        # Store full API key plaintext per product requirement
+        "secret_plain": f"{API_KEY_PREFIX}{prefix}_{secret}",
         **({"expires_at": expires_at_iso} if expires_at_iso else {}),
     }
     logger.info(f"Inserting API key with payload keys: {insert_payload.keys()}")
@@ -610,12 +613,41 @@ async def list_api_keys(req: Request):
         raise
     
     try:
+        # Aggregate usage by api_key prefix (sum of negative deltas per prefix)
+        usage_by_prefix: Dict[str, int] = {}
+        try:
+            usage_resp = _supabase_rest_get(
+                "/rest/v1/credit_ledger",
+                params={
+                    "user_id": f"eq.{user_id}",
+                    "delta": "lt.0",
+                    "select": "prefix:meta->>api_key_prefix,total:sum(delta)",
+                    "group": "prefix",
+                },
+            )
+            if usage_resp.ok:
+                for row in usage_resp.json():
+                    prefix = row.get("prefix")
+                    total = row.get("total")
+                    if not prefix:
+                        continue
+                    try:
+                        # total is negative sum, convert to positive used credits
+                        used = int(total) * -1 if total is not None else 0
+                    except Exception:
+                        used = 0
+                    usage_by_prefix[prefix] = used
+            else:
+                logger.warning(f"Failed to aggregate usage: {usage_resp.status_code} - {usage_resp.text}")
+        except Exception as e:
+            logger.warning(f"Usage aggregation failed: {e}")
+
         resp = _supabase_rest_get(
             "/rest/v1/api_keys",
             params={
                 "user_id": f"eq.{user_id}",
                 "revoked_at": "is.null",  # Only return non-revoked keys
-                "select": "id,prefix,name,created_at,last_used_at,expires_at,revoked_at,scopes",
+                "select": "id,prefix,name,created_at,last_used_at,expires_at,revoked_at,scopes,secret_plain",
                 "order": "created_at.desc",
             },
         )
@@ -634,7 +666,8 @@ async def list_api_keys(req: Request):
                 expires_at=row.get("expires_at"),
                 revoked_at=row.get("revoked_at"),
                 scopes=row.get("scopes") or [],
-                api_key=None,  # Don't return full key after creation for security
+                api_key=row.get("secret_plain"),
+                used_credits=usage_by_prefix.get(row.get("prefix"), 0),
             ))
         logger.info(f"Listed {len(items)} API keys")
         return ListApiKeysResponse(keys=items)

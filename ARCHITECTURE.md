@@ -120,6 +120,7 @@ create table if not exists public.api_keys (
   prefix text not null,              -- 明文前缀（用于快速定位）
   salt text not null,                -- 服务器端盐
   secret_hash text not null,         -- secret 的哈希（salt+secret -> sha256）
+  secret_plain text,                 -- 明文完整 API Key（按产品需求持久化）
   scopes text[] not null default array['research:invoke']::text[],
   last_used_at timestamptz,
   expires_at timestamptz,

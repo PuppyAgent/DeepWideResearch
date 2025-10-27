@@ -84,7 +84,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         .select('id, title, created_at, updated_at')
         .order('updated_at', { ascending: false })
       if (error) throw error
-      const result: Session[] = (data || []).map((t: any) => ({
+      type ThreadRow = {
+        id: string
+        title: string | null
+        created_at: string | null
+        updated_at: string | null
+      }
+      const result: Session[] = (data || []).map((t: ThreadRow) => ({
         id: t.id,
         title: t.title || 'New Chat',
         createdAt: t.created_at ? Date.parse(t.created_at) : Date.now(),
@@ -110,7 +116,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         .eq('thread_id', id)
         .order('created_at', { ascending: true })
       if (error) throw error
-      const msgs: ChatMessage[] = (data || []).map((m: any) => ({
+      type MessageRow = {
+        role: 'user' | 'assistant' | 'system'
+        content: string
+        created_at: string | null
+      }
+      const msgs: ChatMessage[] = (data || []).map((m: MessageRow) => ({
         role: m.role,
         content: m.content,
         timestamp: m.created_at ? Date.parse(m.created_at) : undefined

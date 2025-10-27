@@ -51,7 +51,14 @@ export default function LoginPage() {
             onClick={async () => {
               setError(null)
               setLoading('google')
-              try { await signInWithProvider('google') } catch (e: any) { setError(e?.message || 'Sign-in failed') } finally { setLoading(null) }
+              try {
+                await signInWithProvider('google')
+              } catch (e: unknown) {
+                const errMessage = e instanceof Error ? e.message : 'Sign-in failed'
+                setError(errMessage)
+              } finally {
+                setLoading(null)
+              }
             }}
             style={btnStyle}
             onMouseEnter={(e) => {
@@ -73,7 +80,14 @@ export default function LoginPage() {
             onClick={async () => {
               setError(null)
               setLoading('github')
-              try { await signInWithProvider('github') } catch (e: any) { setError(e?.message || 'Sign-in failed') } finally { setLoading(null) }
+              try {
+                await signInWithProvider('github')
+              } catch (e: unknown) {
+                const errMessage = e instanceof Error ? e.message : 'Sign-in failed'
+                setError(errMessage)
+              } finally {
+                setLoading(null)
+              }
             }}
             style={btnStyle}
             onMouseEnter={(e) => {

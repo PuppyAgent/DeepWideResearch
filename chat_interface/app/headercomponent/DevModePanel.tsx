@@ -13,6 +13,7 @@ interface ApiKeyItem {
   revoked_at?: string | null
   scopes: string[]
   api_key?: string
+  used_credits?: number
 }
 
 interface DevModePanelProps {
@@ -32,7 +33,9 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
   const [copiedKeyId, setCopiedKeyId] = React.useState<string | null>(null)
   const [copiedSnippetFor, setCopiedSnippetFor] = React.useState<string | null>(null)
   const [hoveredRowId, setHoveredRowId] = React.useState<string | null>(null)
-  const [refreshing, setRefreshing] = React.useState(false)
+  const [showSecretByKey, setShowSecretByKey] = React.useState<Record<string, boolean>>({})
+  const [isRendered, setIsRendered] = React.useState(false)
+  const [animateIn, setAnimateIn] = React.useState(false)
   const hasLoadedRef = React.useRef(false)
   const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
   const billingUrl = process.env.NEXT_PUBLIC_BILLING_URL
@@ -122,15 +125,6 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
     }
   }, [isOpen, fetchKeys, fetchBalance])
 
-  const refreshAll = React.useCallback(async () => {
-    if (refreshing) return
-    setRefreshing(true)
-    try {
-      await Promise.all([fetchKeys(), fetchBalance()])
-    } finally {
-      setRefreshing(false)
-    }
-  }, [refreshing, fetchKeys, fetchBalance])
 
   const createKey = async () => {
     if (creating) return
@@ -146,8 +140,22 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
         body: JSON.stringify({ name: 'default' })
       })
       if (!res.ok) throw new Error(await res.text())
-      await res.json()
-      await fetchKeys()
+      const data = await res.json()
+      const newItem: ApiKeyItem = {
+        id: data.id,
+        prefix: data.prefix,
+        name: data.name,
+        created_at: new Date().toISOString(),
+        last_used_at: undefined,
+        expires_at: data.expires_at,
+        revoked_at: null,
+        scopes: ['research:invoke'],
+        api_key: data.api_key
+      }
+      setKeys(prev => [newItem, ...prev])
+      setExpandedId(data.id)
+      // Optionally refresh in background to sync other fields
+      setTimeout(() => { fetchKeys().catch(() => {}) }, 1500)
     } catch (e) {
       console.warn('Failed to create key', e)
     } finally {
@@ -223,13 +231,34 @@ run().catch(console.error);`
     return () => document.removeEventListener('keydown', onKey)
   }, [isOpen, onClose])
 
-  if (!isOpen) return null
+  // Animate panel mount/unmount
+  React.useEffect(() => {
+    if (isOpen) {
+      setIsRendered(true)
+      setAnimateIn(false)
+      let raf1 = 0
+      let raf2 = 0
+      raf1 = requestAnimationFrame(() => {
+        raf2 = requestAnimationFrame(() => setAnimateIn(true))
+      })
+      return () => {
+        cancelAnimationFrame(raf1)
+        cancelAnimationFrame(raf2)
+      }
+    } else {
+      setAnimateIn(false)
+      const t = setTimeout(() => setIsRendered(false), 450)
+      return () => clearTimeout(t)
+    }
+  }, [isOpen])
+
+  if (!isRendered) return null
 
   return (
     <div
       role="dialog"
       aria-modal="true"
-      style={{ position: 'fixed', inset: 0, zIndex: 1000 }}
+      style={{ position: 'fixed', inset: 0, zIndex: 1000, opacity: animateIn ? 1 : 0, transition: 'opacity 450ms cubic-bezier(0.22, 1, 0.36, 1)' }}
     >
       {/* Backdrop */}
       <div
@@ -238,7 +267,9 @@ run().catch(console.error);`
           position: 'fixed',
           inset: 0,
           background: 'rgba(0,0,0,0.45)',
-          backdropFilter: 'blur(2px)'
+          backdropFilter: 'blur(2px)',
+          opacity: animateIn ? 1 : 0,
+          transition: 'opacity 400ms ease'
         }}
       />
 
@@ -249,7 +280,7 @@ run().catch(console.error);`
           position: 'fixed',
           top: '50%',
           left: '50%',
-          transform: 'translate(-50%, -50%)',
+          transform: animateIn ? 'translate(-50%, -50%) scale(1)' : 'translate(-50%, -50%) scale(0.97)',
           width: 'min(760px, 92vw)',
           maxHeight: '80vh',
           overflow: 'auto',
@@ -257,51 +288,39 @@ run().catch(console.error);`
           border: '1px solid #2a2a2a',
           borderRadius: '16px',
           boxShadow: '0 24px 64px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06)',
-          padding: '14px'
+          padding: '14px',
+          opacity: animateIn ? 1 : 0,
+          transition: 'opacity 450ms cubic-bezier(0.22, 1, 0.36, 1), transform 450ms cubic-bezier(0.22, 1, 0.36, 1)'
         }}
       >
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', padding: '8px 8px 12px 8px', marginBottom: '12px' }}>
-        <div style={{ display: 'flex', alignItems: 'center' }}>
-          <div style={{ color: '#eaeaea', fontWeight: 700, letterSpacing: 0.3, fontSize: 14 }}>API Keys</div>
-        </div>
-      </div>
+      {/* Header removed as requested */}
 
       {/* Top Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, marginBottom: 16 }}>
         {/* Credits Card */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'linear-gradient(180deg, rgba(18,18,18,1) 0%, rgba(12,12,12,1) 100%)', border: '1px solid #2a2a2a', borderRadius: 12, padding: '12px 12px' }}>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-            <span style={{ fontSize: 16, color: '#9aa0a6', fontWeight: 700, letterSpacing: 0.3 }}>credits</span>
-            <span style={{ fontSize: 32, color: '#4599DF', fontWeight: 800, letterSpacing: 0.3 }}>
-              {balanceLoading ? '…' : (balance ?? '—')}
-            </span>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <button onClick={refreshAll} disabled={refreshing} title="Refresh" aria-label="Refresh"
-              style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid #2a2a2a', background: '#151515', color: refreshing ? '#888' : '#cfcfcf', cursor: refreshing ? 'not-allowed' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ animation: refreshing ? 'spin 1s linear infinite' : 'none' }}>
-                <path d="M1 4v6h6M23 20v-6h-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </svg>
-            </button>
-            <button onClick={onAddCredits} style={{ height: 32, padding: '0 12px', borderRadius: 8, border: '1px solid rgba(69,153,223,0.7)', background: 'linear-gradient(180deg, #4FA0E2 0%, #3E87C7 100%)', color: '#ffffff', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 12px rgba(69,153,223,0.25)', fontSize: 12 }}>Add More Credits</button>
-          </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 12, flexWrap: 'wrap', background: 'linear-gradient(180deg, rgba(18,18,18,1) 0%, rgba(12,12,12,1) 100%)', border: '1px solid #2a2a2a', borderRadius: 12, padding: '12px 12px' }}>
+          <span style={{ fontSize: 64, color: '#4599DF', fontWeight: 800, letterSpacing: 0.3, lineHeight: 1 }}>
+            {balanceLoading ? '…' : (balance ?? '—')}
+          </span>
+          <span style={{ fontSize: 14, color: '#9aa0a6', fontWeight: 700, letterSpacing: 0.3, lineHeight: 1, alignSelf: 'flex-end' }}>credits</span>
+          <button onClick={onAddCredits} style={{ height: 32, padding: '0 12px', borderRadius: 8, border: '1px solid rgba(69,153,223,0.7)', background: 'linear-gradient(180deg, #4FA0E2 0%, #3E87C7 100%)', color: '#ffffff', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 12px rgba(69,153,223,0.25)', fontSize: 14, alignSelf: 'flex-end' }}>Buy Credits</button>
         </div>
       </div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      {/* Removed unused spin keyframes */}
 
       {/* Keys List */}
       <div style={{ marginBottom: '16px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: 12 }}>
-          {loading && <div style={{ color: '#888', fontSize: '12px' }}>Loading...</div>}
+          {loading && <div style={{ color: '#888', fontSize: '14px' }}>Loading...</div>}
           {!loading && keys.length === 0 && (
-            <div style={{ color: '#888', fontSize: '12px' }}>No keys yet.</div>
+            <div style={{ color: '#888', fontSize: '14px' }}>No keys yet.</div>
           )}
           {!loading && keys.length > 0 && (
             <div style={{ border: '1px solid #2a2a2a', borderRadius: 10, overflow: 'hidden', background: '#121212' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr', padding: '10px 12px', color: '#9aa0a6', fontSize: 12, background: 'rgba(255,255,255,0.02)', borderBottom: '1px solid #2a2a2a' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 112px 80px', padding: '10px 12px', color: '#9aa0a6', fontSize: 14, background: 'transparent' }}>
                 <div>Key</div>
+                <div style={{ textAlign: 'left' }}>Actions</div>
+                <div style={{ textAlign: 'right' }}>Used</div>
               </div>
               {keys.map(k => {
                 const expanded = expandedId === k.id
@@ -311,16 +330,46 @@ run().catch(console.error);`
                 return (
                   <React.Fragment key={k.id}>
                     <div
-                      style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center', padding: '10px 12px', borderTop: '1px solid #2a2a2a', cursor: 'pointer' }}
+                      style={{ display: 'grid', gridTemplateColumns: '1fr 112px 80px', alignItems: 'center', padding: '10px 12px', borderTop: '1px solid #2a2a2a', cursor: 'pointer', background: hoveredRowId === k.id ? 'rgba(255,255,255,0.03)' : 'transparent', transition: 'background-color 200ms ease' }}
                       onMouseEnter={() => setHoveredRowId(k.id)}
                       onMouseLeave={() => setHoveredRowId(prev => (prev === k.id ? null : prev))}
                       onClick={() => setExpandedId(expanded ? null : k.id)}
                     >
-                      <code style={{ color: '#e0e0e0', fontSize: '12px', wordBreak: 'break-all' }}>{displayKey}</code>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', visibility: hoveredRowId === k.id ? 'visible' : 'hidden' }}>
+                      <code style={{ color: '#22C55E', fontSize: '14px', wordBreak: 'break-all' }}>
+                        {(() => {
+                          const full = displayKey
+                          const visible = showSecretByKey[k.id]
+                          if (!full) return ''
+                          if (visible) return full
+                          const firstUnderscore = full.indexOf('_')
+                          const secondUnderscore = firstUnderscore >= 0 ? full.indexOf('_', firstUnderscore + 1) : -1
+                          const stars = '*'.repeat(12)
+                          if (firstUnderscore >= 0 && secondUnderscore > firstUnderscore) {
+                            const prefixAll = full.substring(firstUnderscore + 1, secondUnderscore)
+                            const prefixShort = prefixAll.slice(0, 4)
+                            return `dwr_${prefixShort}…_${stars}`
+                          }
+                          // Fallback: mask everything after last underscore
+                          const last = full.lastIndexOf('_')
+                          if (last >= 0) return `${full.slice(0, last + 1)}${stars}`
+                          return stars
+                        })()}
+                      </code>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '8px' }} onClick={(e) => e.stopPropagation()}>
+                        {/* Toggle visibility */}
                         <button
-                          onClick={async (e) => {
-                            e.stopPropagation()
+                          onClick={() => setShowSecretByKey(prev => ({ ...prev, [k.id]: !prev[k.id] }))}
+                          title={showSecretByKey[k.id] ? 'Hide' : 'Show'}
+                          aria-label={showSecretByKey[k.id] ? 'Hide' : 'Show'}
+                          style={{ width: 28, height: 28, padding: 0, borderRadius: 6, border: 'none', background: 'transparent', color: '#d6d6d6', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z" stroke="currentColor" strokeWidth="2"/>
+                            <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="2"/>
+                          </svg>
+                        </button>
+                        <button
+                          onClick={async () => {
                             const ok = await copyToClipboard(displayKey)
                             if (ok) {
                               setCopiedKeyId(k.id)
@@ -329,7 +378,7 @@ run().catch(console.error);`
                           }}
                           title={copiedKeyId === k.id ? 'Copied' : 'Copy API key'}
                           aria-label={copiedKeyId === k.id ? 'Copied' : 'Copy API key'}
-                          style={{ width: 32, height: 32, padding: 0, borderRadius: 6, border: '1px solid #2a2a2a', background: '#1a1a1a', color: copiedKeyId === k.id ? '#4ade80' : '#d6d6d6', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                          style={{ width: 32, height: 32, padding: 0, borderRadius: 6, border: 'none', background: 'transparent', color: copiedKeyId === k.id ? '#4ade80' : '#d6d6d6', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                         >
                           {copiedKeyId === k.id ? (
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -343,10 +392,10 @@ run().catch(console.error);`
                           )}
                         </button>
                         <button
-                          onClick={(e) => { e.stopPropagation(); revokeKey(k.id) }}
+                          onClick={() => { revokeKey(k.id) }}
                           title="Revoke API key"
                           aria-label="Revoke API key"
-                          style={{ width: 32, height: 32, padding: 0, borderRadius: 6, border: '1px solid #3a2323', background: '#221212', color: '#ff7a7a', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                          style={{ width: 32, height: 32, padding: 0, borderRadius: 6, border: 'none', background: 'transparent', color: '#ff7a7a', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
                         >
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M3 6h18" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
@@ -356,50 +405,87 @@ run().catch(console.error);`
                           </svg>
                         </button>
                       </div>
+                      <div style={{ color: '#c6c6c6', fontSize: '14px', textAlign: 'right' }}>{typeof k.used_credits === 'number' ? k.used_credits : 0}</div>
                     </div>
-                    {expanded && (
-                      <div style={{ borderTop: '1px solid #2a2a2a', padding: '10px 12px', background: '#101010' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            {(['curl','node','python'] as const).map(l => (
-                              <button
-                                key={l}
-                                onClick={() => setLanguageByKey(prev => ({ ...prev, [k.id]: l }))}
-                                style={{
-                                  height: 32,
-                                  padding: '0 10px',
-                                  borderRadius: 6,
-                                  border: '1px solid #2a2a2a',
-                                  background: (lang === l) ? '#1e1e1e' : 'transparent',
-                                  color: '#ddd',
-                                  fontSize: 12,
-                                  cursor: 'pointer',
-                                  display: 'inline-flex',
-                                  alignItems: 'center'
-                                }}
-                              >{l}</button>
-                            ))}
-                          </div>
-                          <button
-                            onClick={async () => {
-                              const ok = await copyToClipboard(codeFor(lang, placeholder))
-                              if (ok) {
-                                setCopiedSnippetFor(k.id)
-                                setTimeout(() => setCopiedSnippetFor(null), 1200)
-                              }
-                            }}
-                            title="Copy example"
-                            style={{ height: 32, padding: '0 10px', borderRadius: 6, border: '1px solid #2a2a2a', background: '#171717', color: '#dcdcdc', fontSize: 12, cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}
-                          >
-                            {copiedSnippetFor === k.id ? 'Copied' : 'Copy example'}
-                          </button>
+                    <div
+                      style={{
+                        borderTop: expanded ? '1px solid #2a2a2a' : '1px solid transparent',
+                        padding: expanded ? '10px 12px' : '0 12px',
+                        background: '#101010',
+                        maxHeight: expanded ? 360 : 0,
+                        opacity: expanded ? 1 : 0,
+                        transform: expanded ? 'translateY(0)' : 'translateY(-6px)',
+                        overflow: 'hidden',
+                        transition: 'max-height 700ms cubic-bezier(0.22, 1, 0.36, 1), opacity 500ms ease, transform 500ms ease, border-top-color 500ms ease, padding 500ms ease'
+                      }}
+                      aria-hidden={!expanded}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {(['curl','node','python'] as const).map(l => (
+                            <button
+                              key={l}
+                              onClick={() => setLanguageByKey(prev => ({ ...prev, [k.id]: l }))}
+                              style={{
+                                height: 32,
+                                padding: '0 10px',
+                                borderRadius: 6,
+                                border: '1px solid #2a2a2a',
+                                background: (lang === l) ? '#1e1e1e' : 'transparent',
+                                color: '#ddd',
+                                fontSize: 14,
+                                cursor: 'pointer',
+                                display: 'inline-flex',
+                                alignItems: 'center'
+                              }}
+                            >{l}</button>
+                          ))}
                         </div>
-                        <div style={{ color: '#8b8b8b', fontSize: 12, marginBottom: 6 }}>Endpoint: <code style={{ color: '#cfcfcf' }}>{apiBase}/api/research</code></div>
-                        <pre style={{ whiteSpace: 'pre-wrap', color: '#cfcfcf', fontSize: '12px', margin: 0, background: '#0f0f0f', border: '1px solid #2a2a2a', borderRadius: '8px', padding: '10px' }}>
+                      </div>
+                      <div style={{ color: '#8b8b8b', fontSize: 14, marginBottom: 6 }}>Endpoint: <code style={{ color: '#cfcfcf' }}>{apiBase}/api/research</code></div>
+                      <div style={{ position: 'relative' }}>
+                        <pre style={{ whiteSpace: 'pre-wrap', color: '#cfcfcf', fontSize: '14px', margin: 0, background: '#000000', border: '1px solid #2a2a2a', borderRadius: '8px', padding: '10px', paddingTop: '34px' }}>
                           {codeFor(lang, placeholder)}
                         </pre>
+                        <button
+                          onClick={async () => {
+                            const ok = await copyToClipboard(codeFor(lang, placeholder))
+                            if (ok) {
+                              setCopiedSnippetFor(k.id)
+                              setTimeout(() => setCopiedSnippetFor(null), 1200)
+                            }
+                          }}
+                          title={copiedSnippetFor === k.id ? 'Copied' : 'Copy example'}
+                          aria-label="Copy example"
+                          style={{
+                            position: 'absolute',
+                            top: 6,
+                            right: 6,
+                            width: 28,
+                            height: 28,
+                            border: 'none',
+                            borderRadius: 6,
+                            background: 'rgba(255,255,255,0.06)',
+                            color: copiedSnippetFor === k.id ? '#4ade80' : '#d6d6d6',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                        >
+                          {copiedSnippetFor === k.id ? (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+                            </svg>
+                          ) : (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                              <rect x="9" y="9" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="2"/>
+                              <rect x="4" y="4" width="11" height="11" rx="2" stroke="currentColor" strokeWidth="2" opacity="0.6"/>
+                            </svg>
+                          )}
+                        </button>
                       </div>
-                    )}
+                    </div>
                   </React.Fragment>
                 )
               })}
@@ -412,9 +498,9 @@ run().catch(console.error);`
             disabled={creating}
             title="Create new API key"
             aria-label="Create new API key"
-            style={{ height: 32, padding: '0 12px', borderRadius: 8, border: '1px solid #2a2a2a', background: creating ? '#1a1a1a' : '#1e1e1e', color: '#ddd', cursor: creating ? 'progress' : 'pointer', fontSize: 12, display: 'inline-flex', alignItems: 'center' }}
+            style={{ height: 32, padding: '0 12px', borderRadius: 8, border: '1px solid rgba(34,197,94,0.6)', background: creating ? '#14532d' : 'linear-gradient(180deg, #22C55E 0%, #16A34A 100%)', color: '#0b1b10', fontWeight: 400, letterSpacing: 0.2, cursor: creating ? 'progress' : 'pointer', fontSize: 14, display: 'inline-flex', alignItems: 'center', boxShadow: 'none' }}
           >
-            {creating ? 'Creating…' : 'New key'}
+            {creating ? 'Creating…' : 'Create a New key'}
           </button>
         </div>
       </div>
