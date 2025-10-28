@@ -22,7 +22,7 @@ interface DevModePanelProps {
 }
 
 export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
-  const { getAccessToken } = useAuth()
+  const { getAccessToken, session } = useAuth()
   const [loading, setLoading] = React.useState(false)
   const [creating, setCreating] = React.useState(false)
   const [keys, setKeys] = React.useState<ApiKeyItem[]>([])
@@ -37,8 +37,33 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
   const [isRendered, setIsRendered] = React.useState(false)
   const [animateIn, setAnimateIn] = React.useState(false)
   const hasLoadedRef = React.useRef(false)
+  const [activeTab, setActiveTab] = React.useState<'credits' | 'api-keys'>('credits')
   const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-  const billingUrl = process.env.NEXT_PUBLIC_BILLING_URL
+  const polarProductId = process.env.NEXT_PUBLIC_POLAR_PRODUCT_ID
+  const productId15 = process.env.NEXT_PUBLIC_POLAR_PRODUCT_ID_15
+  const productId100 = process.env.NEXT_PUBLIC_POLAR_PRODUCT_ID_100
+  const productIdsJson = process.env.NEXT_PUBLIC_POLAR_PRODUCT_IDS_JSON
+  const parsedProductIds = React.useMemo<Record<string, string> | null>(() => {
+    try {
+      return productIdsJson ? JSON.parse(productIdsJson) : null
+    } catch {
+      return null
+    }
+  }, [productIdsJson])
+  const resolvedProductId15 = productId15 || parsedProductIds?.['15'] || parsedProductIds?.['plus'] || parsedProductIds?.['PLUS'] || null
+  const resolvedProductId100 = productId100 || parsedProductIds?.['100'] || parsedProductIds?.['pro'] || parsedProductIds?.['PRO'] || null
+  const canBuyPlus = !!resolvedProductId15
+  const canBuyPro = !!resolvedProductId100
+  const [activePlan, setActivePlan] = React.useState<'free' | 'plus' | 'pro' | 'enterprise'>('free')
+
+  React.useEffect(() => {
+    try {
+      const saved = typeof window !== 'undefined' ? localStorage.getItem('dwr_active_plan') : null
+      if (saved === 'free' || saved === 'plus' || saved === 'pro' || saved === 'enterprise') {
+        setActivePlan(saved)
+      }
+    } catch {}
+  }, [])
 
   const copyToClipboard = React.useCallback(async (text: string) => {
     try {
@@ -71,14 +96,31 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
     }
   }, [])
 
-  const onAddCredits = React.useCallback(() => {
-    const url = billingUrl || '/billing'
-    try {
-      window.open(url, '_blank', 'noopener')
-    } catch {
-      alert('Billing page coming soon.')
+  const gotoCheckout = React.useCallback((productId?: string | null, planKey?: 'plus' | 'pro') => {
+    let url = '/api/polar/checkout'
+    const pid = productId
+    if (!pid) {
+      alert('Billing not configured: missing product id')
+      return
     }
-  }, [billingUrl])
+    const q = url.includes('?') ? '&' : '?'
+    url = `${url}${q}products=${encodeURIComponent(pid)}`
+    const email = session?.user?.email
+    if (email) {
+      url += `&customerEmail=${encodeURIComponent(email)}`
+    }
+    // Mark as pending only; activation happens after checkout success callback
+    if (planKey) {
+      try {
+        localStorage.setItem('dwr_pending_plan', planKey)
+      } catch {}
+    }
+    try {
+      window.location.href = url
+    } catch {
+      try { window.open(url, '_blank', 'noopener') } catch {}
+    }
+  }, [polarProductId, session?.user?.email])
 
   const fetchKeys = React.useCallback(async () => {
     setLoading(true)
@@ -125,6 +167,21 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
     }
   }, [isOpen, fetchKeys, fetchBalance])
 
+  // Promote pending plan to active after returning with success flag
+  React.useEffect(() => {
+    try {
+      const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+      const isSuccess = !!(params && (params.get('checkout') === 'success' || params.get('success') === '1'))
+      if (!isSuccess) return
+      const pending = typeof window !== 'undefined' ? localStorage.getItem('dwr_pending_plan') : null
+      if (pending === 'plus' || pending === 'pro') {
+        localStorage.setItem('dwr_active_plan', pending)
+        localStorage.removeItem('dwr_pending_plan')
+        setActivePlan(pending)
+        fetchBalance().catch(() => {})
+      }
+    } catch {}
+  }, [fetchBalance])
 
   const createKey = async () => {
     if (creating) return
@@ -154,7 +211,6 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
       }
       setKeys(prev => [newItem, ...prev])
       setExpandedId(data.id)
-      // Optionally refresh in background to sync other fields
       setTimeout(() => { fetchKeys().catch(() => {}) }, 1500)
     } catch (e) {
       console.warn('Failed to create key', e)
@@ -178,47 +234,6 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
     } catch (e) {
       console.warn('Failed to revoke key', e)
     }
-  }
-
-  const sampleCurl = (placeholder: string) => `curl -N -X POST "${apiBase}/api/research" \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: ${placeholder}" \
-  -d '{
-    "message": {
-      "query": "Your research question",
-      "deepwide": { "deep": 0.8, "wide": 0.6 },
-      "mcp": {}
-    },
-    "history": []
-  }'`
-
-  const sampleNode = (placeholder: string) => `import fetch from 'node-fetch';
-
-async function run() {
-  const res = await fetch('${apiBase}/api/research', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-API-Key': '${placeholder}'
-    },
-    body: JSON.stringify({
-      message: { query: 'Your research question', deepwide: { deep: 0.8, wide: 0.6 }, mcp: {} },
-      history: []
-    })
-  });
-  for await (const chunk of res.body) {
-    process.stdout.write(chunk.toString());
-  }
-}
-
-run().catch(console.error);`
-
-  const samplePython = (placeholder: string) => `import requests\n\nurl = '${apiBase}/api/research'\nheaders = {\n  'Content-Type': 'application/json',\n  'X-API-Key': '${placeholder}'\n}\npayload = {\n  'message': {\n    'query': 'Your research question',\n    'deepwide': { 'deep': 0.8, 'wide': 0.6 },\n    'mcp': {}\n  },\n  'history': []\n}\n\nwith requests.post(url, headers=headers, json=payload, stream=True) as r:\n    for line in r.iter_lines():\n        if line:\n            print(line.decode('utf-8'))`
-
-  const codeFor = (lang: 'curl' | 'node' | 'python', placeholder: string) => {
-    if (lang === 'node') return sampleNode(placeholder)
-    if (lang === 'python') return samplePython(placeholder)
-    return sampleCurl(placeholder)
   }
 
   // Close on ESC
@@ -254,6 +269,18 @@ run().catch(console.error);`
 
   if (!isRendered) return null
 
+  const NavBtn = ({ id, label, icon }: { id: 'credits' | 'api-keys', label: string, icon?: React.ReactNode }) => (
+    <button
+      onClick={() => setActiveTab(id)}
+      className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md transition-colors ${
+        activeTab === id ? 'bg-[#1F1F1F] text-[#E5E5E5]' : 'text-[#9CA3AF] hover:bg-[#1A1A1A] hover:text-[#E5E5E5]'
+      }`}
+    >
+      {icon}
+      <span className='text-[13px]'>{label}</span>
+    </button>
+  )
+
   return (
     <div
       role="dialog"
@@ -273,42 +300,197 @@ run().catch(console.error);`
         }}
       />
 
-      {/* Centered Content */}
+      {/* Panel */}
       <div
         onClick={(e) => e.stopPropagation()}
-        style={{
-          position: 'fixed',
-          top: '50%',
-          left: '50%',
-          transform: animateIn ? 'translate(-50%, -50%) scale(1)' : 'translate(-50%, -50%) scale(0.97)',
-          width: 'min(760px, 92vw)',
-          maxHeight: '80vh',
-          overflow: 'auto',
-          background: 'linear-gradient(140deg, rgba(22,22,22,0.98) 0%, rgba(14,14,14,0.98) 100%)',
-          border: '1px solid #2a2a2a',
-          borderRadius: '16px',
-          boxShadow: '0 24px 64px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.06)',
-          padding: '14px',
-          opacity: animateIn ? 1 : 0,
-          transition: 'opacity 450ms cubic-bezier(0.22, 1, 0.36, 1), transform 450ms cubic-bezier(0.22, 1, 0.36, 1)'
-        }}
+        className={`fixed top-1/2 left-1/2 ${animateIn ? 'scale-100 opacity-100' : 'scale-[0.97] opacity-0'} -translate-x-1/2 -translate-y-1/2 w-[min(980px,96vw)] h-[720px] overflow-hidden bg-[linear-gradient(140deg,rgba(22,22,22,0.98)_0%,rgba(14,14,14,0.98)_100%)] border border-[#2a2a2a] rounded-2xl shadow-[0_24px_64px_rgba(0,0,0,0.55),0_0_0_1px_rgba(255,255,255,0.06)] transition-all`}
       >
-      {/* Header removed as requested */}
+        <div className='flex h-full text-[13px] text-[#D4D4D4]'>
+          {/* Sidebar */}
+          <div className='w-56 h-full border-r border-[#2f2f2f] bg-transparent py-3'>
+            <nav className='space-y-0.5 px-2'>
+              <div className='px-2 pb-1 text-[12px] font-semibold text-[#9CA3AF]'>Account</div>
+              <NavBtn id='credits' label='Credits' icon={<svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='12' r='10'/><path d='M8 12h8M8 16h5M8 8h8'/></svg>} />
+              <NavBtn id='api-keys' label='API Keys' icon={<svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 2l-2 2m-7 7l-2 2m4-4l-2 2m-7 7l-2 2'/><circle cx='7' cy='17' r='3'/><path d='M7 14l6-6 4 4'/></svg>} />
+            </nav>
+          </div>
 
-      {/* Top Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 12, marginBottom: 16 }}>
-        {/* Credits Card */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 12, flexWrap: 'wrap', background: 'linear-gradient(180deg, rgba(18,18,18,1) 0%, rgba(12,12,12,1) 100%)', border: '1px solid #2a2a2a', borderRadius: 12, padding: '12px 12px' }}>
-          <span style={{ fontSize: 64, color: '#4599DF', fontWeight: 800, letterSpacing: 0.3, lineHeight: 1 }}>
+          {/* Content */}
+          <div className='flex flex-col flex-1 pl-6 pr-4 py-6 overflow-y-auto min-h-0'>
+            <div className='flex items-center justify-start mb-3'>
+              <div className='text-[16px] font-semibold text-[#e6e6e6]'>
+                {activeTab === 'credits' ? 'Credits' : 'API Keys'}
+              </div>
+            </div>
+
+            {/* Credits */}
+            {activeTab === 'credits' && (
+              <div className='space-y-4'>
+                {/* Active plan */}
+                <div>
+                  <div className='text-[12px] font-semibold text-[#9CA3AF] mb-2'>Active plan</div>
+                  <div className='rounded-xl border border-[#2a2a2a] bg-[#121212] px-4 py-3 flex items-start justify-between'>
+                    <div>
+                      <div className='text-[16px] font-semibold text-[#E5E5E5]'>Current plan</div>
+                      <div className='text-[13px] text-[#9AA0A6]'>The connected research workspace</div>
+                      <div className='text-[12px] text-[#9AA0A6] mt-2'>$15 or $100 billed monthly • includes monthly credits</div>
+                    </div>
+                    <div className='text-right'>
+                      <div className='text-[12px] text-[#9AA0A6] mb-1'>Balance</div>
+                      <div className='text-[28px] font-extrabold text-[#4599DF] leading-7'>
             {balanceLoading ? '…' : (balance ?? '—')}
-          </span>
-          <span style={{ fontSize: 14, color: '#9aa0a6', fontWeight: 700, letterSpacing: 0.3, lineHeight: 1, alignSelf: 'flex-end' }}>credits</span>
-          <button onClick={onAddCredits} style={{ height: 32, padding: '0 12px', borderRadius: 8, border: '1px solid rgba(69,153,223,0.7)', background: 'linear-gradient(180deg, #4FA0E2 0%, #3E87C7 100%)', color: '#ffffff', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.06), 0 4px 12px rgba(69,153,223,0.25)', fontSize: 14, alignSelf: 'flex-end' }}>Buy Credits</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* All plans */}
+                <div>
+                  <div className='text-[12px] font-semibold text-[#9CA3AF] mb-2'>All plans</div>
+                  <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3'>
+                    {/* Free */}
+                    <div className='border border-white/20 bg-black/20 p-4 md:p-5 flex flex-col rounded-xl'>
+                      <div className='text-[16px] font-semibold text-foreground/90 mb-1'>Free</div>
+                      <div className='mt-1 mb-4'>
+                        <span className='text-[22px] font-bold text-foreground/90'>$0</span>
+                        <span className='text-[12px] text-foreground/50 ml-1'>/ month</span>
+                      </div>
+                      <div className='space-y-2 text-[12px] text-foreground/70 mb-4 flex-grow'>
+                        <div className='flex items-start gap-2'>
+                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <span><strong className='text-foreground/90'>100 credits</strong> per month</span>
+                        </div>
+                        <div className='flex items-start gap-2'>
+                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <span>Community support</span>
+                        </div>
+                        <div className='flex items-start gap-2'>
+                          <span className='text-foreground/40'>[✗]</span>
+                          <span className='text-foreground/60'>API & SDK access</span>
+                        </div>
+                        <div className='flex items-start gap-2'>
+                          <span className='text-foreground/40'>[✗]</span>
+                          <span className='text-foreground/60'>Advanced features</span>
+                        </div>
+                        <div className='flex items-start gap-2'>
+                          <span className='text-foreground/40'>[✗]</span>
+                          <span className='text-foreground/60'>Custom integrations</span>
+                        </div>
+                        <div className='flex items-start gap-2'>
+                          <span className='text-foreground/40'>[✗]</span>
+                          <span className='text-foreground/60'>SLA & compliance</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Plus - highlight only if active */}
+                    <div className={`${activePlan==='plus' ? 'border-[#2CAC58] bg-gradient-to-br from-[#2CAC58]/10 to-black/20' : 'border-white/20 bg-black/20'} border p-4 md:p-5 flex flex-col relative rounded-xl`}>
+                      {activePlan==='plus' && (<div className='absolute top-0 right-0 bg-[#2CAC58] px-2 py-0.5 text-[10px] font-bold text-white rounded-bl-md'>Active</div>)}
+                      <div className='text-[16px] font-semibold text-foreground/90 mb-1'>Plus</div>
+                      <div className='mt-1 mb-4'>
+                        <span className='text-[22px] font-bold text-foreground/90'>$15</span>
+                        <span className='text-[12px] text-foreground/50 ml-1'>/ month</span>
+                      </div>
+                      <div className='space-y-2 text-[12px] text-foreground/70 mb-4 flex-grow'>
+                        <div className='flex items-start gap-2'>
+                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <span><strong className='text-foreground/90'>2,000 credits</strong> per month</span>
+                        </div>
+                        <div className='flex items-start gap-2'>
+                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <span>API & SDK access</span>
+                        </div>
+                        <div className='flex items-start gap-2'>
+                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <span>Priority support</span>
+                        </div>
+                        <div className='flex items-start gap-2'>
+                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <span>Advanced features</span>
+                        </div>
+                        <div className='flex items-start gap-2'>
+                          <span className='text-foreground/40'>[✗]</span>
+                          <span className='text-foreground/60'>Custom integrations</span>
+                        </div>
+                        <div className='flex items-start gap-2'>
+                          <span className='text-foreground/40'>[✗]</span>
+                          <span className='text-foreground/60'>SLA & compliance</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => gotoCheckout(resolvedProductId15, 'plus')}
+                        disabled={!canBuyPlus}
+                        className={`w-full px-4 py-2.5 text-[12px] font-semibold transition-all rounded-md ${activePlan==='plus' ? 'bg-[#2CAC58] hover:bg-[#25994D] text-white shadow-lg shadow-[#2CAC58]/20 hover:shadow-xl hover:shadow-[#2CAC58]/30' : 'border border-white/20 bg-white/5 hover:bg-white/10 text-foreground/90'}`}
+                      >{activePlan==='plus' ? 'Current plan' : (canBuyPlus ? 'Upgrade' : 'Configure')}</button>
+                    </div>
+
+                    {/* Pro */}
+                    <div className={`${activePlan==='pro' ? 'border-[#2CAC58] bg-gradient-to-br from-[#2CAC58]/10 to-black/20' : 'border-white/20 bg-black/20'} border p-4 md:p-5 flex flex-col relative rounded-xl`}>
+                      {activePlan==='pro' && (<div className='absolute top-0 right-0 bg-[#2CAC58] px-2 py-0.5 text-[10px] font-bold text-white rounded-bl-md'>Active</div>)}
+                      <div className='text-[16px] font-semibold text-foreground/90 mb-1'>Pro</div>
+                      <div className='mt-1 mb-4'>
+                        <span className='text-[22px] font-bold text-foreground/90'>$100</span>
+                        <span className='text-[12px] text-foreground/50 ml-1'>/ month</span>
+                      </div>
+                      <div className='space-y-2 text-[12px] text-foreground/70 mb-4 flex-grow'>
+                        <div className='flex items-start gap-2'>
+                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <span><strong className='text-foreground/90'>15,000 credits</strong> per month</span>
+                        </div>
+                        <div className='flex items-start gap-2'>
+                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <span>API & SDK access</span>
+                        </div>
+                        <div className='flex items-start gap-2'>
+                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <span>Dedicated support</span>
+                        </div>
+                        <div className='flex items-start gap-2'>
+                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <span>All advanced features</span>
+                        </div>
+                        <div className='flex items-start gap-2'>
+                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <span>Custom integrations</span>
+                        </div>
+                        <div className='flex items-start gap-2'>
+                          <span className='text-foreground/40'>[✗]</span>
+                          <span className='text-foreground/60'>SLA & compliance</span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => gotoCheckout(resolvedProductId100, 'pro')}
+                        disabled={!canBuyPro}
+                        className={`w-full px-4 py-2.5 text-[12px] font-semibold transition-all rounded-md ${activePlan==='pro' ? 'bg-[#2CAC58] hover:bg-[#25994D] text-white shadow-lg shadow-[#2CAC58]/20 hover:shadow-xl hover:shadow-[#2CAC58]/30' : 'border border-white/20 bg-white/5 hover:bg-white/10 text-foreground/90'}`}
+                      >{activePlan==='pro' ? 'Current plan' : (canBuyPro ? 'Upgrade' : 'Configure')}</button>
+                    </div>
+
+                    {/* Enterprise */}
+                    <div className='border border-white/20 bg-black/20 p-4 md:p-5 flex flex-col rounded-xl'>
+                      <div className='text-[16px] font-semibold text-foreground/90 mb-2'>Enterprise</div>
+                      <div className='mt-1 mb-4'>
+                        <span className='text-[18px] font-bold text-foreground/90'>Custom</span>
+                      </div>
+                      <div className='space-y-2 text-[12px] text-foreground/70 mb-4 flex-grow'>
+                        <div className='flex items-start gap-2'><span className='text-[#2CAC58]'>[✓]</span><span><strong className='text-foreground/90'>Unlimited credits</strong></span></div>
+                        <div className='flex items-start gap-2'><span className='text-[#2CAC58]'>[✓]</span><span>API & SDK access</span></div>
+                        <div className='flex items-start gap-2'><span className='text-[#2CAC58]'>[✓]</span><span>24/7 dedicated support</span></div>
+                        <div className='flex items-start gap-2'><span className='text-[#2CAC58]'>[✓]</span><span>All advanced features</span></div>
+                        <div className='flex items-start gap-2'><span className='text-[#2CAC58]'>[✓]</span><span>Custom integrations</span></div>
+                        <div className='flex items-start gap-2'><span className='text-[#2CAC58]'>[✓]</span><span>SLA & compliance</span></div>
+                      </div>
+                      <a href='mailto:guantum@puppyagent.com' className='w-full text-center border border-[#2CAC58] bg-[#2CAC58]/10 hover:bg-[#2CAC58]/20 px-4 py-2.5 text-[12px] font-semibold text-foreground/90 transition-all rounded-md'>
+                        Contact Sales
+                      </a>
+                    </div>
         </div>
       </div>
-      {/* Removed unused spin keyframes */}
+                {/* Highlights removed per request */}
+              </div>
+            )}
 
-      {/* Keys List */}
+            {/* API Keys */}
+            {activeTab === 'api-keys' && (
       <div style={{ marginBottom: '16px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: 12 }}>
           {loading && <div style={{ color: '#888', fontSize: '14px' }}>Loading...</div>}
@@ -349,14 +531,12 @@ run().catch(console.error);`
                             const prefixShort = prefixAll.slice(0, 4)
                             return `dwr_${prefixShort}…_${stars}`
                           }
-                          // Fallback: mask everything after last underscore
                           const last = full.lastIndexOf('_')
                           if (last >= 0) return `${full.slice(0, last + 1)}${stars}`
                           return stars
                         })()}
                       </code>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '8px' }} onClick={(e) => e.stopPropagation()}>
-                        {/* Toggle visibility */}
                         <button
                           onClick={() => setShowSecretByKey(prev => ({ ...prev, [k.id]: !prev[k.id] }))}
                           title={showSecretByKey[k.id] ? 'Hide' : 'Show'}
@@ -445,11 +625,26 @@ run().catch(console.error);`
                       <div style={{ color: '#8b8b8b', fontSize: 14, marginBottom: 6 }}>Endpoint: <code style={{ color: '#cfcfcf' }}>{apiBase}/api/research</code></div>
                       <div style={{ position: 'relative' }}>
                         <pre style={{ whiteSpace: 'pre-wrap', color: '#cfcfcf', fontSize: '14px', margin: 0, background: '#000000', border: '1px solid #2a2a2a', borderRadius: '8px', padding: '10px', paddingTop: '34px' }}>
-                          {codeFor(lang, placeholder)}
+                                  {(() => {
+                                    const codeFor = (lang: 'curl' | 'node' | 'python', placeholder: string) => {
+                                      if (lang === 'node') return `import fetch from 'node-fetch';\n\nasync function run() {\n  const res = await fetch('${apiBase}/api/research', {\n    method: 'POST',\n    headers: {\n      'Content-Type': 'application/json',\n      'X-API-Key': '${placeholder}'\n    },\n    body: JSON.stringify({\n      message: { query: 'Your research question', deepwide: { deep: 0.8, wide: 0.6 }, mcp: {} },\n      history: []\n    })\n  });\n  for await (const chunk of res.body) {\n    process.stdout.write(chunk.toString());\n  }\n}\n\nrun().catch(console.error);`
+                                      if (lang === 'python') return `import requests\n\nurl = '${apiBase}/api/research'\nheaders = {\n  'Content-Type': 'application/json',\n  'X-API-Key': '${placeholder}'\n}\npayload = {\n  'message': {\n    'query': 'Your research question',\n    'deepwide': { 'deep': 0.8, 'wide': 0.6 },\n    'mcp': {}\n  },\n  'history': []\n}\n\nwith requests.post(url, headers=headers, json=payload, stream=True) as r:\n    for line in r.iter_lines():\n        if line:\n            print(line.decode('utf-8'))`
+                                      return `curl -N -X POST "${apiBase}/api/research" \\\n  -H "Content-Type: application/json" \\\n  -H "X-API-Key: ${placeholder}" \\\n  -d '{\n    "message": {\n      "query": "Your research question",\n      "deepwide": { "deep": 0.8, "wide": 0.6 },\n      "mcp": {}\n    },\n    "history": []\n  }'`
+                                    }
+                                    const lang = languageByKey[k.id] || 'curl'
+                                    return codeFor(lang, placeholder)
+                                  })()}
                         </pre>
                         <button
                           onClick={async () => {
-                            const ok = await copyToClipboard(codeFor(lang, placeholder))
+                                    const lang = languageByKey[k.id] || 'curl'
+                                    const codeFor = (lang: 'curl' | 'node' | 'python', placeholder: string) => {
+                                      if (lang === 'node') return `import fetch from 'node-fetch';\n\nasync function run() {\n  const res = await fetch('${apiBase}/api/research', {\n    method: 'POST',\n    headers: {\n      'Content-Type': 'application/json',\n      'X-API-Key': '${placeholder}'\n    },\n    body: JSON.stringify({\n      message: { query: 'Your research question', deepwide: { deep: 0.8, wide: 0.6 }, mcp: {} },\n      history: []\n    })\n  });\n  for await (const chunk of res.body) {\n    process.stdout.write(chunk.toString());\n  }\n}\n\nrun().catch(console.error);`
+                                      if (lang === 'python') return `import requests\n\nurl = '${apiBase}/api/research'\nheaders = {\n  'Content-Type': 'application/json',\n  'X-API-Key': '${placeholder}'\n}\npayload = {\n  'message': {\n    'query': 'Your research question',\n    'deepwide': { 'deep': 0.8, 'wide': 0.6 },\n    'mcp': {}\n  },\n  'history': []\n}\n\nwith requests.post(url, headers=headers, json=payload, stream=True) as r:\n    for line in r.iter_lines():\n        if line:\n            print(line.decode('utf-8'))`
+                                      return `curl -N -X POST "${apiBase}/api/research" \\\n  -H "Content-Type: application/json" \\\n  -H "X-API-Key: ${placeholder}" \\\n  -d '{\n    "message": {\n      "query": "Your research question",\n      "deepwide": { "deep": 0.8, "wide": 0.6 },\n      "mcp": {}\n    },\n    "history": []\n  }'`
+                                    }
+                                    const snippet = codeFor(lang, placeholder)
+                                    const ok = await copyToClipboard(snippet)
                             if (ok) {
                               setCopiedSnippetFor(k.id)
                               setTimeout(() => setCopiedSnippetFor(null), 1200)
@@ -502,6 +697,9 @@ run().catch(console.error);`
           >
             {creating ? 'Creating…' : 'Create a New key'}
           </button>
+                </div>
+              </div>
+            )}
         </div>
       </div>
       </div>
