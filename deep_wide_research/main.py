@@ -43,6 +43,7 @@ logger = logging.getLogger(__name__)
 
 # Configure CORS to allow frontend access
 import os
+import re
 from dotenv import load_dotenv
 
 # Load environment from .env files (local development)
@@ -56,6 +57,9 @@ except Exception:
 # Detect if running in a production environment
 is_production = bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RENDER") or os.getenv("VERCEL"))
 
+# Initialize optional origin regex (set in prod via env)
+allowed_origin_regex = None
+
 if is_production:
     # Production: must configure via environment variables
     allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "")
@@ -68,11 +72,14 @@ if is_production:
             "Please set the ALLOWED_ORIGINS environment variable with your frontend URL(s).\n"
             "Example: ALLOWED_ORIGINS=https://your-frontend.vercel.app,https://www.your-domain.com"
         )
+    # Optional regex to allow multiple subdomains (e.g., ^https://.*\\.example\\.com$)
+    allowed_origin_regex = os.getenv("ALLOWED_ORIGIN_REGEX", None)
 else:
     # Local development: always allow all origins (for convenience)
     allowed_origins = ["*"]
     allow_all_origins = True
     print("💡 Tip: Running in development mode with CORS set to allow all origins (*)")
+    allowed_origin_regex = None
 
 # Print CORS configuration (for debugging)
 print("="*80)
@@ -80,12 +87,14 @@ print("🔧 CORS Configuration:")
 print(f"   Environment: {'🌐 Production' if is_production else '💻 Development (Local)'}")
 print(f"   Allowed Origins: {allowed_origins}")
 print(f"   Allow All Origins: {'✅ Yes (*)' if allow_all_origins else '❌ No (Restricted)'}")
+print(f"   Allowed Origin Regex: {allowed_origin_regex or 'None'}")
 print(f"   Allow Credentials: {'✅ Yes' if not allow_all_origins else '❌ No (incompatible with *)'}")
 print("="*80)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=allowed_origin_regex,
     allow_credentials=not allow_all_origins,  # Credentials cannot be enabled when using '*'
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
@@ -98,16 +107,40 @@ from fastapi import Request
 
 @app.options("/{full_path:path}")
 async def options_handler(request: Request, full_path: str):
-    """Handle OPTIONS preflight requests for CORS"""
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": allowed_origins[0] if allowed_origins else "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Max-Age": "3600",
-        }
-    )
+    """Handle OPTIONS preflight requests for CORS (preflight should not require auth)"""
+    origin = request.headers.get("origin") or request.headers.get("Origin")
+    req_headers = request.headers.get("access-control-request-headers") or request.headers.get("Access-Control-Request-Headers")
+
+    headers = {
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+        "Access-Control-Max-Age": "3600",
+    }
+
+    # Development: allow all
+    if allow_all_origins:
+        headers["Access-Control-Allow-Origin"] = "*"
+        headers["Access-Control-Allow-Headers"] = req_headers or "*"
+        return Response(status_code=204, headers=headers)
+
+    # Production: only allow configured origins (list or regex)
+    origin_allowed = False
+    if origin:
+        if origin in allowed_origins:
+            origin_allowed = True
+        elif 'allowed_origin_regex' in globals() and allowed_origin_regex:
+            try:
+                origin_allowed = re.match(allowed_origin_regex, origin) is not None
+            except re.error:
+                origin_allowed = False
+
+    if not origin_allowed:
+        return Response(status_code=400, content="Disallowed CORS origin")
+
+    headers["Access-Control-Allow-Origin"] = origin
+    headers["Vary"] = "Origin"
+    headers["Access-Control-Allow-Credentials"] = "true"
+    headers["Access-Control-Allow-Headers"] = req_headers or "authorization,content-type"
+    return Response(status_code=204, headers=headers)
 
 
 # ===================== Supabase Auth & DB Helpers =====================
