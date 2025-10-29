@@ -26,6 +26,7 @@ import requests
 from jose import jwt
 import secrets
 import hashlib
+import hmac
 from datetime import datetime, timezone, timedelta
 import logging
 
@@ -54,6 +55,27 @@ try:
     load_dotenv(dotenv_path=current_dir / '.env', override=False)
 except Exception:
     pass
+# Polar webhook secret (optional but recommended)
+POLAR_WEBHOOK_SECRET = os.getenv("POLAR_WEBHOOK_SECRET")
+
+def _verify_polar_signature(req: "Request", raw_body: bytes) -> None:
+    """Verify Polar webhook signature using HMAC-SHA256 over raw body.
+    Expects header 'Polar-Webhook-Signature' containing lowercase hex digest.
+    """
+    if not POLAR_WEBHOOK_SECRET:
+        return
+    sig = (
+        req.headers.get("Polar-Webhook-Signature")
+        or req.headers.get("polar-webhook-signature")
+        or req.headers.get("POLAR-WEBHOOK-SIGNATURE")
+    )
+    if not sig:
+        raise HTTPException(status_code=403, detail="Missing Polar-Webhook-Signature")
+    digest = hmac.new(POLAR_WEBHOOK_SECRET.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+    header_sig = sig.strip().lower()
+    if not hmac.compare_digest(header_sig, digest):
+        raise HTTPException(status_code=403, detail="Invalid webhook signature")
+
 
 # Detect if running in a production environment
 is_production = bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RENDER") or os.getenv("VERCEL"))
@@ -750,8 +772,18 @@ async def polar_webhook(req: Request):
 
     Grants monthly credits on successful payment/activation and optionally updates subscription + plan.
     """
+    # Read raw body first for signature verification
+    raw = await req.body()
     try:
-        payload = await req.json()
+        _verify_polar_signature(req, raw)
+    except HTTPException:
+        raise
+    except Exception:
+        # Be conservative: reject if verification throws unexpected error
+        raise HTTPException(status_code=403, detail="Webhook verification failed")
+
+    try:
+        payload = json.loads(raw or b"{}")
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
