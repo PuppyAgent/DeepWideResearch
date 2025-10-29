@@ -193,6 +193,10 @@ POLAR_PLAN_CREDITS_JSON = os.getenv("POLAR_PLAN_CREDITS_JSON", "{}")  # Fallback
 POLAR_PLAN_CREDITS_TTL_SEC = int(os.getenv("POLAR_PLAN_CREDITS_TTL_SEC", "300"))
 _plan_credits_cache: Dict[str, Any] = {"data": {}, "last_fetch": 0.0}
 
+# Fallback credit amounts per plan (used when mapping cannot resolve)
+POLAR_PLUS_CREDITS_DEFAULT = int(os.getenv("POLAR_PLUS_CREDITS", "2000"))
+POLAR_PRO_CREDITS_DEFAULT = int(os.getenv("POLAR_PRO_CREDITS", "15000"))
+
 def _parse_plan_credits_json(text: str) -> Dict[str, int]:
     try:
         data = json.loads(text or "{}")
@@ -243,6 +247,21 @@ def _resolve_plan_credits(product_id: Optional[str] = None, price_id: Optional[s
     if product_id and product_id in mapping:
         return mapping[product_id]
     return None
+
+def _determine_units_for_purchase(product_id: Optional[str], price_id: Optional[str], plan_hint: Optional[str]) -> int:
+    """Determine credit units to grant for a Polar purchase.
+    Priority: mapping(product/price) → plan hint (plus/pro) → default plus.
+    """
+    units = _resolve_plan_credits(product_id=product_id, price_id=price_id)
+    if isinstance(units, int) and units > 0:
+        return units
+    plan = (plan_hint or "").strip().lower()
+    if plan == "pro":
+        return POLAR_PRO_CREDITS_DEFAULT
+    if plan == "plus":
+        return POLAR_PLUS_CREDITS_DEFAULT
+    # Fallback: assume plus
+    return POLAR_PLUS_CREDITS_DEFAULT
 
 def _get_jwks() -> Dict[str, Any]:
     global _jwks_cache
@@ -762,10 +781,15 @@ async def polar_webhook(req: Request):
     grantworthy = any(k in evt_type for k in ["paid", "payment", "invoice", "subscription.active", "subscription_created", "subscription_updated"])
 
     if grantworthy:
-        try:
-            units = int(os.getenv("POLAR_PLUS_CREDITS", "1000"))
-        except Exception:
-            units = 1000
+        # Try to resolve product/price and plan
+        product_id = (
+            data.get("product_id")
+            or (data.get("product") or {}).get("id")
+            or (data.get("price") or {}).get("product_id")
+        )
+        price_id = data.get("price_id") or (data.get("price") or {}).get("id")
+        plan_hint = (data.get("metadata") or {}).get("plan")
+        units = _determine_units_for_purchase(product_id=product_id, price_id=price_id, plan_hint=plan_hint)
         rid = f"polar_{event_id}"
         new_balance = _grant_credits(
             user_id=user_id,
@@ -774,7 +798,7 @@ async def polar_webhook(req: Request):
             meta={
                 "provider": "polar",
                 "event_type": evt_type,
-                "raw": {"id": event_id},
+                "raw": {"id": event_id, "product_id": product_id, "price_id": price_id},
             },
         )
 
@@ -788,9 +812,10 @@ async def polar_webhook(req: Request):
             current_period_end=period_end,
             metadata={"event_id": event_id, "event_type": evt_type},
         )
-        # Promote plan to pro if active/paid
+        # Promote plan based on resolved units if active/paid
         if str(status).lower() in ("active", "paid"):
-            _update_profile_plan(user_id, "pro")
+            plan_for_profile = "pro" if units >= POLAR_PRO_CREDITS_DEFAULT else ("plus" if units >= POLAR_PLUS_CREDITS_DEFAULT else "free")
+            _update_profile_plan(user_id, plan_for_profile)
 
         return {"ok": True, "user_id": user_id, "granted": units, "balance": new_balance}
 
@@ -799,6 +824,52 @@ async def polar_webhook(req: Request):
 
 
 # ===================== API Key Management Endpoints =====================
+class CheckoutSuccessRequest(BaseModel):
+    """Client-confirmed checkout success.
+    Used as a fallback to grant credits immediately upon redirect success.
+    """
+    plan: Optional[str] = None  # 'plus' | 'pro'
+    product_id: Optional[str] = None
+    price_id: Optional[str] = None
+
+
+@app.post("/api/polar/checkout/success")
+async def polar_checkout_success(body: CheckoutSuccessRequest, req: Request):
+    """Grant credits immediately after client returns from successful checkout.
+
+    This is complementary to the webhook; safe to call once per success.
+    """
+    try:
+        user_id = _verify_supabase_jwt(req.headers.get("Authorization"))
+    except Exception as e:
+        logger.error(f"JWT verification failed on checkout success: {e}")
+        raise
+
+    units = _determine_units_for_purchase(
+        product_id=(body.product_id or None),
+        price_id=(body.price_id or None),
+        plan_hint=(body.plan or None),
+    )
+
+    rid = f"polar_checkout_success_{user_id}_{int(time.time())}"
+    new_balance = _grant_credits(
+        user_id=user_id,
+        units=units,
+        request_id=rid,
+        meta={
+            "provider": "polar",
+            "source": "checkout_success_endpoint",
+            "product_id": body.product_id,
+            "price_id": body.price_id,
+            "plan": (body.plan or None),
+        },
+    )
+
+    # Update plan optimistically based on units
+    plan_for_profile = "pro" if units >= POLAR_PRO_CREDITS_DEFAULT else ("plus" if units >= POLAR_PLUS_CREDITS_DEFAULT else "free")
+    _update_profile_plan(user_id, plan_for_profile)
+
+    return {"ok": True, "user_id": user_id, "granted": units, "balance": new_balance}
 class CreateApiKeyRequest(BaseModel):
     name: Optional[str] = None
     expires_in_days: Optional[int] = None

@@ -178,7 +178,21 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
         localStorage.setItem('dwr_active_plan', pending)
         localStorage.removeItem('dwr_pending_plan')
         setActivePlan(pending)
-        fetchBalance().catch(() => {})
+        // notify backend to grant credits immediately (webhook is still the primary path)
+        ;(async () => {
+          try {
+            const token = await getAccessToken()
+            await fetch(`${apiBase}/api/polar/checkout/success`, {
+              method: 'POST',
+              headers: {
+                'Authorization': token ? `Bearer ${token}` : '',
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ plan: pending })
+            })
+          } catch {}
+          try { await fetchBalance() } catch {}
+        })()
       }
     } catch {}
   }, [fetchBalance])
