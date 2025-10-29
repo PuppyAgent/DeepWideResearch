@@ -32,6 +32,11 @@
   - 订阅与一次性充值
   - Webhook 更新 `subscriptions`，并在周期开始/支付成功时发放 credits
 
+- 支付 `Polar`（Plus 月订阅）
+  - Plus 档位（$10/月）
+  - 前端跳转 Polar 托管 Checkout，或服务端用 TS SDK 动态创建 Checkout 会话
+  - Webhook 成功事件触发每月发放固定 credits（幂等）
+
 部署拓扑建议：
 - `chat_interface` → Vercel（域名如 `app.example.com`）
 - `deep_wide_research` → Railway/Render/Fly（域名如 `api.example.com`）
@@ -68,6 +73,12 @@
 ### Stripe（支付）
 - 订阅/计费周期；Webhook 推送事件
 - Webhook 更新 `subscriptions`，并在支付成功/周期开始时发放 credits（正向 `delta`）
+
+### Polar（支付）
+- Plus 档：$10/月；仅做“订阅→发放 credits”的极简流程
+- 事件来源：Polar Webhook（订阅创建/续费/发票已支付）
+- 后端：验签 → 识别 `user_id`（优先用 `metadata.user_id`，否则按邮箱匹配）→ `sp_grant_credits`
+- 可选：同步 `subscriptions` 状态与 `current_period_end`
 
 ---
 
@@ -771,6 +782,12 @@ API Key 场景：
 - 前端创建 Stripe Checkout → 用户支付成功
 - Webhook 接收事件：更新 `subscriptions`、在账本中发放月度额度 `sp_grant_credits`
 
+3A) Polar Plus 月订阅（极简）
+- 前端跳转 Polar 托管 Checkout（Plus $10/月）
+- 支付成功/续费 → Polar 推送 Webhook 到后端 `/api/polar/webhook`
+- 后端验签（`POLAR_WEBHOOK_SECRET`），优先使用 `metadata.user_id` 识别用户；如无则按订单邮箱匹配 Supabase 用户
+- 发放：`sp_grant_credits(user_id, POLAR_PLUS_CREDITS, request_id='polar_<event_id>')`（幂等）
+
 4) 历史记录
 - 前端直接读写 `threads`、`messages` 表；RLS 限制为本人数据
 
@@ -802,6 +819,13 @@ API Key 场景：
   - 处理 `customer.subscription.created|updated|deleted`、`invoice.paid` 等
   - 更新 `subscriptions` 并发放额度
 
+- `POST /api/polar/webhook`（后端 FastAPI）
+  - 验证 Polar Webhook 签名（`POLAR_WEBHOOK_SECRET`）
+  - 事件：订阅创建/续费/发票已支付
+  - 读取事件 `id`、金额、买家信息、`metadata.user_id`
+  - 发放月度额度：`sp_grant_credits(user_id, POLAR_PLUS_CREDITS, request_id='polar_<event_id>')`（幂等）
+  - 可选：更新 `subscriptions`
+
 ---
 
 ## 8. 前端集成要点（`chat_interface`）
@@ -814,6 +838,10 @@ API Key 场景：
   - 升级/订阅（集成 Stripe Checkout/Portal）
   - 会话与消息：改为读写 Supabase 表，替代本地 `data/chat_history`
 - 可选：中间件或 server components 做路由保护
+
+- 订阅（Polar）：
+  - 最简：使用 `NEXT_PUBLIC_POLAR_CHECKOUT_URL` 直接跳转托管 Checkout；无需等回跳，最终以 Webhook 发放为准
+  - 可选：服务端用 Polar TS SDK 动态创建 Checkout，会话更灵活（参考文档：[Polar TypeScript SDK](https://polar.sh/docs/integrate/sdk/typescript)）
 
 ---
 
@@ -833,6 +861,10 @@ API Key 场景：
 - `SUPABASE_JWKS_URL`（如 `https://<project>.supabase.co/auth/v1/keys`）
 - `STRIPE_SECRET_KEY`
 - `OPENAI_API_KEY` 等模型相关密钥
+  
+- Polar：
+- `POLAR_WEBHOOK_SECRET`（Webhook 签名校验）
+- `POLAR_PLUS_CREDITS`（每月发放额度，例如 `1000`）
   
 （可选）API Key 命名空间：无需新增变量，后端使用 Supabase REST 访问 `api_keys` 表。
 
@@ -923,3 +955,39 @@ Supabase：
 - Supabase 迁移 SQL（可直接执行）
 - 前后端文件的最小改动 PR（含 JWT 校验、RPC 调用、UI 升级面板）
 
+
+---
+
+## 16. Polar 多档位/多价格（极简架构）
+
+- 目标：在 Polar 中配置多个订阅档位（如 Plus/Pro/Team），由前端选择档位，服务端创建对应 Checkout，会后端 Webhook 发放不同额度 credits，保持幂等。
+
+- 后台（Polar Dashboard）
+  - 为每个档位创建一个产品（或在一个产品下配置多个价格）。
+  - 记录每个档位的 `product_id`（或 `price_id`）。
+
+- 前端（Next.js）
+  - 在 UI（如 `DevModePanel`）提供档位选择（Plus/Pro/Team）。
+  - 跳转服务端路由：`/api/polar/checkout?products=<product_id>&customerEmail=<email>`（或 `prices=<price_id>`）。
+  - 说明：我们使用 `@polar-sh/nextjs` 适配器，参数为 camelCase；邮箱使用 `customerEmail` 以便预填。
+  - 文档参考：[Polar TypeScript SDK](https://polar.sh/docs/integrate/sdk/typescript)。
+
+- 服务端（FastAPI Webhook）
+  - 端点：`POST /api/polar/webhook`（验签 `POLAR_WEBHOOK_SECRET`）。
+  - 从事件 payload 中读取 `product_id`/`price_id` 与 `event.id`。
+  - 依据映射发放不同额度：`sp_grant_credits(user_id, amount, request_id='polar_<event_id>')`。
+  - 幂等：同一 `event_id` 不重复发放；可选同步 `subscriptions` 表。
+
+- 配置（建议）
+  - 前端（Vercel）：
+    - `NEXT_PUBLIC_POLAR_PRODUCT_ID_PLUS`、`NEXT_PUBLIC_POLAR_PRODUCT_ID_PRO`、`NEXT_PUBLIC_POLAR_PRODUCT_ID_TEAM`（或用一个 JSON：`NEXT_PUBLIC_POLAR_PRODUCT_IDS_JSON`）。
+  - 后端（Railway/Render）：
+    - `POLAR_ACCESS_TOKEN`（含 `checkouts:write`、`products:read`、`customers:read`）
+    - `POLAR_SUCCESS_URL`
+    - `POLAR_SERVER`（开发可设 `sandbox`）
+    - `POLAR_PLAN_CREDITS_JSON`（如：`{"<PLUS_ID>":1000,"<PRO_ID>":3000,"<TEAM_ID>":10000}`）
+
+- 流程
+  1) 用户在前端选择档位 → 调用 `/api/polar/checkout?...` 创建会话，Polar 预填邮箱。
+  2) 用户支付成功/续费 → Polar Webhook → 后端根据 `product_id` 发放对应 credits（幂等）。
+  3) 前端余额查询使用 `GET /api/credits/balance` 实时展示。

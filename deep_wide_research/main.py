@@ -43,6 +43,8 @@ logger = logging.getLogger(__name__)
 
 # Configure CORS to allow frontend access
 import os
+import re
+from urllib.parse import urlparse
 from dotenv import load_dotenv
 
 # Load environment from .env files (local development)
@@ -56,11 +58,44 @@ except Exception:
 # Detect if running in a production environment
 is_production = bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RENDER") or os.getenv("VERCEL"))
 
+# Initialize optional origin regex (set in prod via env)
+allowed_origin_regex = None
+
+def _normalize_origin(origin: str) -> str:
+    """Normalize an origin string for reliable equality checks.
+    - trims whitespace
+    - strips surrounding quotes if present
+    - strips trailing slash
+    - lowercases scheme and host (port preserved)
+    """
+    if not origin:
+        return origin
+    s = origin.strip()
+    # Strip surrounding quotes (common misconfiguration in env vars)
+    if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+        s = s[1:-1].strip()
+    # Remove trailing slash only if it's the last character
+    if s.endswith('/'):
+        s = s[:-1]
+    # Lowercase scheme and netloc
+    try:
+        parsed = urlparse(s)
+        if parsed.scheme and parsed.netloc:
+            netloc = parsed.netloc.lower()
+            scheme = parsed.scheme.lower()
+            rest = parsed._replace(scheme=scheme, netloc=netloc)
+            return rest.geturl()
+    except Exception:
+        pass
+    return s
+
 if is_production:
     # Production: must configure via environment variables
     allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "")
     if allowed_origins_env:
         allowed_origins = [origin.strip() for origin in allowed_origins_env.split(",") if origin.strip()]
+        # Normalize to avoid trailing slash / case issues
+        allowed_origins = [_normalize_origin(o) for o in allowed_origins]
         allow_all_origins = False
     else:
         raise ValueError(
@@ -68,11 +103,14 @@ if is_production:
             "Please set the ALLOWED_ORIGINS environment variable with your frontend URL(s).\n"
             "Example: ALLOWED_ORIGINS=https://your-frontend.vercel.app,https://www.your-domain.com"
         )
+    # Optional regex to allow multiple subdomains (e.g., ^https://.*\\.example\\.com$)
+    allowed_origin_regex = os.getenv("ALLOWED_ORIGIN_REGEX", None)
 else:
     # Local development: always allow all origins (for convenience)
     allowed_origins = ["*"]
     allow_all_origins = True
     print("💡 Tip: Running in development mode with CORS set to allow all origins (*)")
+    allowed_origin_regex = None
 
 # Print CORS configuration (for debugging)
 print("="*80)
@@ -80,12 +118,14 @@ print("🔧 CORS Configuration:")
 print(f"   Environment: {'🌐 Production' if is_production else '💻 Development (Local)'}")
 print(f"   Allowed Origins: {allowed_origins}")
 print(f"   Allow All Origins: {'✅ Yes (*)' if allow_all_origins else '❌ No (Restricted)'}")
+print(f"   Allowed Origin Regex: {allowed_origin_regex or 'None'}")
 print(f"   Allow Credentials: {'✅ Yes' if not allow_all_origins else '❌ No (incompatible with *)'}")
 print("="*80)
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=allowed_origin_regex,
     allow_credentials=not allow_all_origins,  # Credentials cannot be enabled when using '*'
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
@@ -98,16 +138,41 @@ from fastapi import Request
 
 @app.options("/{full_path:path}")
 async def options_handler(request: Request, full_path: str):
-    """Handle OPTIONS preflight requests for CORS"""
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": allowed_origins[0] if allowed_origins else "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Max-Age": "3600",
-        }
-    )
+    """Handle OPTIONS preflight requests for CORS (preflight should not require auth)"""
+    origin = request.headers.get("origin") or request.headers.get("Origin")
+    normalized_origin = _normalize_origin(origin) if origin else None
+    req_headers = request.headers.get("access-control-request-headers") or request.headers.get("Access-Control-Request-Headers")
+
+    headers = {
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+        "Access-Control-Max-Age": "3600",
+    }
+
+    # Development: allow all
+    if allow_all_origins:
+        headers["Access-Control-Allow-Origin"] = "*"
+        headers["Access-Control-Allow-Headers"] = req_headers or "*"
+        return Response(status_code=204, headers=headers)
+
+    # Production: only allow configured origins (list or regex)
+    origin_allowed = False
+    if normalized_origin:
+        if normalized_origin in allowed_origins:
+            origin_allowed = True
+        elif 'allowed_origin_regex' in globals() and allowed_origin_regex:
+            try:
+                origin_allowed = re.match(allowed_origin_regex, origin) is not None
+            except re.error:
+                origin_allowed = False
+
+    if not origin_allowed:
+        return Response(status_code=400, content="Disallowed CORS origin")
+
+    headers["Access-Control-Allow-Origin"] = origin
+    headers["Vary"] = "Origin"
+    headers["Access-Control-Allow-Credentials"] = "true"
+    headers["Access-Control-Allow-Headers"] = req_headers or "authorization,content-type"
+    return Response(status_code=204, headers=headers)
 
 
 # ===================== Supabase Auth & DB Helpers =====================
@@ -119,6 +184,84 @@ SUPABASE_JWKS_URL = os.getenv("SUPABASE_JWKS_URL") or (
 SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")  # Optional: legacy HS256 secret
 
 _jwks_cache: Optional[Dict[str, Any]] = None
+
+# ===================== Plan → Credits Mapping (Polar seats) =====================
+# Supports dynamic mapping via remote JSON or env JSON. Keys can be product_id or
+# price_id (recommend prefixing price keys as 'price:<id>' to avoid collisions).
+POLAR_PLAN_CREDITS_URL = os.getenv("POLAR_PLAN_CREDITS_URL")  # Optional remote JSON endpoint
+POLAR_PLAN_CREDITS_JSON = os.getenv("POLAR_PLAN_CREDITS_JSON", "{}")  # Fallback inline JSON
+POLAR_PLAN_CREDITS_TTL_SEC = int(os.getenv("POLAR_PLAN_CREDITS_TTL_SEC", "300"))
+_plan_credits_cache: Dict[str, Any] = {"data": {}, "last_fetch": 0.0}
+
+# Fallback credit amounts per plan (used when mapping cannot resolve)
+POLAR_PLUS_CREDITS_DEFAULT = int(os.getenv("POLAR_PLUS_CREDITS", "2000"))
+POLAR_PRO_CREDITS_DEFAULT = int(os.getenv("POLAR_PRO_CREDITS", "15000"))
+
+def _parse_plan_credits_json(text: str) -> Dict[str, int]:
+    try:
+        data = json.loads(text or "{}")
+        out: Dict[str, int] = {}
+        if isinstance(data, dict):
+            for k, v in data.items():
+                try:
+                    out[str(k)] = int(v)
+                except Exception:
+                    continue
+        return out
+    except Exception:
+        return {}
+
+def _load_plan_credits_mapping(force: bool = False) -> Dict[str, int]:
+    now = time.time()
+    # Use remote URL if provided
+    if POLAR_PLAN_CREDITS_URL:
+        if force or (now - float(_plan_credits_cache.get("last_fetch", 0.0)) > POLAR_PLAN_CREDITS_TTL_SEC):
+            try:
+                resp = requests.get(POLAR_PLAN_CREDITS_URL, timeout=5)
+                if resp.ok:
+                    _plan_credits_cache["data"] = _parse_plan_credits_json(resp.text)
+                    _plan_credits_cache["last_fetch"] = now
+                else:
+                    # Fallback to env JSON on fetch failure
+                    _plan_credits_cache["data"] = _parse_plan_credits_json(POLAR_PLAN_CREDITS_JSON)
+                    _plan_credits_cache["last_fetch"] = now
+            except Exception:
+                _plan_credits_cache["data"] = _parse_plan_credits_json(POLAR_PLAN_CREDITS_JSON)
+                _plan_credits_cache["last_fetch"] = now
+        return _plan_credits_cache.get("data", {})
+    # Else: always parse env JSON (simple and predictable)
+    return _parse_plan_credits_json(POLAR_PLAN_CREDITS_JSON)
+
+def _resolve_plan_credits(product_id: Optional[str] = None, price_id: Optional[str] = None) -> Optional[int]:
+    mapping = _load_plan_credits_mapping()
+    if not mapping:
+        return None
+    # Prefer explicit price mapping when provided
+    if price_id:
+        # Support both raw price_id and namespaced key 'price:<id>'
+        if price_id in mapping:
+            return mapping[price_id]
+        ns_key = f"price:{price_id}"
+        if ns_key in mapping:
+            return mapping[ns_key]
+    if product_id and product_id in mapping:
+        return mapping[product_id]
+    return None
+
+def _determine_units_for_purchase(product_id: Optional[str], price_id: Optional[str], plan_hint: Optional[str]) -> int:
+    """Determine credit units to grant for a Polar purchase.
+    Priority: mapping(product/price) → plan hint (plus/pro) → default plus.
+    """
+    units = _resolve_plan_credits(product_id=product_id, price_id=price_id)
+    if isinstance(units, int) and units > 0:
+        return units
+    plan = (plan_hint or "").strip().lower()
+    if plan == "pro":
+        return POLAR_PRO_CREDITS_DEFAULT
+    if plan == "plus":
+        return POLAR_PLUS_CREDITS_DEFAULT
+    # Fallback: assume plus
+    return POLAR_PLUS_CREDITS_DEFAULT
 
 def _get_jwks() -> Dict[str, Any]:
     global _jwks_cache
@@ -364,6 +507,85 @@ def _consume_credits(user_id: str, units: int, request_id: str, meta: Dict[str, 
     except Exception:
         return 0
 
+def _grant_credits(user_id: str, units: int, request_id: str, meta: Dict[str, Any]) -> int:
+    if not SUPABASE_URL:
+        raise HTTPException(status_code=500, detail="Server misconfigured: SUPABASE_URL not set")
+    url = f"{SUPABASE_URL}/rest/v1/rpc/sp_grant_credits"
+    payload = {
+        "p_user_id": user_id,
+        "p_units": units,
+        "p_request_id": request_id,
+        "p_meta": meta or {},
+    }
+    resp = requests.post(url, headers=_supabase_auth_headers(), json=payload, timeout=10)
+    if not resp.ok:
+        raise HTTPException(status_code=500, detail=f"Supabase grant error: {resp.text}")
+    try:
+        return int(resp.json())
+    except Exception:
+        return 0
+
+def _find_user_by_email(email: Optional[str]) -> Optional[str]:
+    if not email:
+        return None
+    try:
+        resp = _supabase_rest_get(
+            "/rest/v1/profiles",
+            params={"email": f"eq.{email}", "select": "user_id"},
+        )
+        if resp.ok:
+            arr = resp.json()
+            if isinstance(arr, list) and arr:
+                uid = arr[0].get("user_id")
+                return str(uid) if uid else None
+    except Exception:
+        return None
+    return None
+
+def _update_subscription(user_id: str, provider: str, status: Optional[str], current_period_end: Optional[str], metadata: Dict[str, Any]) -> None:
+    try:
+        # Try to find existing subscription for this user/provider
+        resp = _supabase_rest_get(
+            "/rest/v1/subscriptions",
+            params={
+                "user_id": f"eq.{user_id}",
+                "provider": f"eq.{provider}",
+                "select": "id",
+                "limit": "1",
+            },
+        )
+        if resp.ok and isinstance(resp.json(), list) and resp.json():
+            sub_id = resp.json()[0].get("id")
+            if sub_id:
+                _supabase_rest_patch(
+                    f"/rest/v1/subscriptions?id=eq.{sub_id}",
+                    {
+                        "status": status,
+                        "current_period_end": current_period_end,
+                        "metadata": metadata or {},
+                    },
+                )
+                return
+        # Insert new
+        _supabase_rest_post(
+            "/rest/v1/subscriptions",
+            {
+                "user_id": user_id,
+                "provider": provider,
+                "status": status or "active",
+                "current_period_end": current_period_end,
+                "metadata": metadata or {},
+            },
+        )
+    except Exception as e:
+        logger.warning(f"Failed to upsert subscription: {e}")
+
+def _update_profile_plan(user_id: str, plan: str) -> None:
+    try:
+        _supabase_rest_patch(f"/rest/v1/profiles?user_id=eq.{user_id}", {"plan": plan})
+    except Exception:
+        pass
+
 def _compute_credits_from_params(deep: float, wide: float) -> int:
     """Compute credits as: 4 + deep * wide * 16, then clamp to [5, 20]."""
     try:
@@ -521,7 +743,133 @@ async def get_balance(req: Request):
     return {"user_id": user_id, "balance": balance}
 
 
+# ===================== Polar Webhook =====================
+@app.post("/api/polar/webhook")
+async def polar_webhook(req: Request):
+    """Handle Polar webhook events (sandbox/production).
+
+    Grants monthly credits on successful payment/activation and optionally updates subscription + plan.
+    """
+    try:
+        payload = await req.json()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid JSON payload")
+
+    evt_type = str(payload.get("type") or "").lower()
+    data = payload.get("data") or {}
+    event_id = str(payload.get("id") or data.get("id") or int(time.time()*1000))
+
+    # Identify user: prefer metadata.user_id, else email lookup
+    meta = data.get("metadata") or {}
+    user_id = meta.get("user_id") or meta.get("supabase_user_id")
+
+    if not user_id:
+        email = (
+            data.get("customer", {}).get("email")
+            or data.get("buyer", {}).get("email")
+            or data.get("email")
+            or payload.get("customerEmail")
+        )
+        user_id = _find_user_by_email(email)
+
+    if not user_id:
+        # Can't resolve user; nothing to grant
+        logger.warning("[polar_webhook] User not found for event %s", event_id)
+        return {"ok": True, "skipped": True}
+
+    # Determine if event should grant credits
+    grantworthy = any(k in evt_type for k in ["paid", "payment", "invoice", "subscription.active", "subscription_created", "subscription_updated"])
+
+    if grantworthy:
+        # Try to resolve product/price and plan
+        product_id = (
+            data.get("product_id")
+            or (data.get("product") or {}).get("id")
+            or (data.get("price") or {}).get("product_id")
+        )
+        price_id = data.get("price_id") or (data.get("price") or {}).get("id")
+        plan_hint = (data.get("metadata") or {}).get("plan")
+        units = _determine_units_for_purchase(product_id=product_id, price_id=price_id, plan_hint=plan_hint)
+        rid = f"polar_{event_id}"
+        new_balance = _grant_credits(
+            user_id=user_id,
+            units=units,
+            request_id=rid,
+            meta={
+                "provider": "polar",
+                "event_type": evt_type,
+                "raw": {"id": event_id, "product_id": product_id, "price_id": price_id},
+            },
+        )
+
+        # Optional: update subscription + plan
+        status = (data.get("status") or data.get("state") or "active")
+        period_end = data.get("current_period_end") or data.get("period_end") or data.get("current_period_end_at")
+        _update_subscription(
+            user_id=user_id,
+            provider="polar",
+            status=str(status).lower(),
+            current_period_end=period_end,
+            metadata={"event_id": event_id, "event_type": evt_type},
+        )
+        # Promote plan based on resolved units if active/paid
+        if str(status).lower() in ("active", "paid"):
+            plan_for_profile = "pro" if units >= POLAR_PRO_CREDITS_DEFAULT else ("plus" if units >= POLAR_PLUS_CREDITS_DEFAULT else "free")
+            _update_profile_plan(user_id, plan_for_profile)
+
+        return {"ok": True, "user_id": user_id, "granted": units, "balance": new_balance}
+
+    # Non-grant events acknowledged
+    return {"ok": True}
+
+
 # ===================== API Key Management Endpoints =====================
+class CheckoutSuccessRequest(BaseModel):
+    """Client-confirmed checkout success.
+    Used as a fallback to grant credits immediately upon redirect success.
+    """
+    plan: Optional[str] = None  # 'plus' | 'pro'
+    product_id: Optional[str] = None
+    price_id: Optional[str] = None
+
+
+@app.post("/api/polar/checkout/success")
+async def polar_checkout_success(body: CheckoutSuccessRequest, req: Request):
+    """Grant credits immediately after client returns from successful checkout.
+
+    This is complementary to the webhook; safe to call once per success.
+    """
+    try:
+        user_id = _verify_supabase_jwt(req.headers.get("Authorization"))
+    except Exception as e:
+        logger.error(f"JWT verification failed on checkout success: {e}")
+        raise
+
+    units = _determine_units_for_purchase(
+        product_id=(body.product_id or None),
+        price_id=(body.price_id or None),
+        plan_hint=(body.plan or None),
+    )
+
+    rid = f"polar_checkout_success_{user_id}_{int(time.time())}"
+    new_balance = _grant_credits(
+        user_id=user_id,
+        units=units,
+        request_id=rid,
+        meta={
+            "provider": "polar",
+            "source": "checkout_success_endpoint",
+            "product_id": body.product_id,
+            "price_id": body.price_id,
+            "plan": (body.plan or None),
+        },
+    )
+
+    # Update plan optimistically based on units
+    plan_for_profile = "pro" if units >= POLAR_PRO_CREDITS_DEFAULT else ("plus" if units >= POLAR_PLUS_CREDITS_DEFAULT else "free")
+    _update_profile_plan(user_id, plan_for_profile)
+
+    return {"ok": True, "user_id": user_id, "granted": units, "balance": new_balance}
 class CreateApiKeyRequest(BaseModel):
     name: Optional[str] = None
     expires_in_days: Optional[int] = None
