@@ -22,7 +22,7 @@ interface DevModePanelProps {
 }
 
 export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
-  const { getAccessToken, session } = useAuth()
+  const { getAccessToken, session, supabase } = useAuth()
   const [loading, setLoading] = React.useState(false)
   const [creating, setCreating] = React.useState(false)
   const [keys, setKeys] = React.useState<ApiKeyItem[]>([])
@@ -181,13 +181,32 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
     }
   }, [apiBase, getAccessToken])
 
+  const fetchPlan = React.useCallback(async () => {
+    try {
+      if (!supabase || !session?.user?.id) return
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('plan')
+        .eq('user_id', session.user.id)
+        .single()
+      if (!error && data && typeof data.plan === 'string') {
+        const p = data.plan as 'free' | 'plus' | 'pro' | 'team'
+        setActivePlan(p)
+        try { localStorage.setItem('dwr_active_plan', p) } catch {}
+      }
+    } catch (e) {
+      console.warn('Failed to load plan', e)
+    }
+  }, [supabase, session?.user?.id])
+
   React.useEffect(() => {
     if (isOpen && !hasLoadedRef.current) {
       hasLoadedRef.current = true
       fetchKeys()
       fetchBalance()
+      fetchPlan()
     }
-  }, [isOpen, fetchKeys, fetchBalance])
+  }, [isOpen, fetchKeys, fetchBalance, fetchPlan])
 
   // Promote pending plan to active after returning with success flag
   React.useEffect(() => {
@@ -220,11 +239,12 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
           // No fallback call; still refresh balance
           ;(async () => {
             try { await fetchBalance() } catch {}
+            try { await fetchPlan() } catch {}
           })()
         }
       }
     } catch {}
-  }, [fetchBalance])
+  }, [fetchBalance, fetchPlan])
 
   const createKey = async () => {
     if (creating) return
@@ -278,6 +298,25 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
       console.warn('Failed to revoke key', e)
     }
   }
+
+  const requestDowngrade = React.useCallback(async (target: 'plus' | 'pro' | 'free') => {
+    try {
+      const token = await getAccessToken()
+      const res = await fetch(`${paymentsBase}/api/polar/downgrade`, {
+        method: 'POST',
+        headers: {
+          'Authorization': token ? `Bearer ${token}` : '',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ target })
+      })
+      if (!res.ok) throw new Error(await res.text())
+      // Optionally show a toast; refresh plan later via webhook
+      try { await fetchPlan() } catch {}
+    } catch (e) {
+      console.warn('Failed to request downgrade', e)
+    }
+  }, [paymentsBase, getAccessToken, fetchPlan])
 
   // Close on ESC
   React.useEffect(() => {
@@ -352,9 +391,13 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
           {/* Sidebar */}
           <div className='w-56 h-full border-r border-[#2f2f2f] bg-transparent py-3'>
             <nav className='space-y-0.5 px-2'>
-              <div className='px-2 pb-1 text-[12px] font-semibold text-[#9CA3AF]'>Account</div>
               <NavBtn id='credits' label='Credits' icon={<svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='12' r='10'/><path d='M8 12h8M8 16h5M8 8h8'/></svg>} />
-              <NavBtn id='api-keys' label='API Keys' icon={<svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M21 2l-2 2m-7 7l-2 2m4-4l-2 2m-7 7l-2 2'/><circle cx='7' cy='17' r='3'/><path d='M7 14l6-6 4 4'/></svg>} />
+              <NavBtn id='api-keys' label='API Keys' icon={<svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
+                <circle cx='7' cy='12' r='4'/>
+                <path d='M11 12h8'/>
+                <path d='M19 12v3'/>
+                <path d='M16 12v2'/>
+              </svg>} />
             </nav>
           </div>
 
@@ -372,17 +415,46 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
                 {/* Active plan */}
                 <div>
                   <div className='text-[12px] font-semibold text-[#9CA3AF] mb-2'>Active plan</div>
-                  <div className='rounded-xl border border-[#2a2a2a] bg-[#121212] px-4 py-3 flex items-start justify-between'>
+                  <div className='rounded-xl border border-[#2a2a2a] bg-[#121212] px-4 py-3 flex items-center justify-between'>
                     <div>
-                      <div className='text-[16px] font-semibold text-[#E5E5E5]'>Current plan</div>
-                      <div className='text-[13px] text-[#9AA0A6]'>The connected research workspace</div>
-                      <div className='text-[12px] text-[#9AA0A6] mt-2'>$15 or $100 billed monthly • includes monthly credits</div>
+                      <div className='text-[12px] text-[#9AA0A6] mb-1'>Current credits</div>
+                      <div className='flex items-center gap-2'>
+                        <div>
+                          <div className='text-[28px] font-extrabold text-[#4599DF] leading-7'>
+            {balanceLoading ? '…' : (balance ?? '—')}
+                          </div>
+                          {balance !== null && !balanceLoading && (
+                            <div className='text-[10px] text-[#9AA0A6] mt-0.5'>
+                              ≈ {Math.floor(balance / 20)} full deep wide research{Math.floor(balance / 20) !== 1 ? 'es' : ''}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => { fetchBalance().catch(() => {}) }}
+                          disabled={balanceLoading}
+                          aria-label='Refresh balance'
+                          title='Refresh'
+                          className='ml-1 w-7 h-7 rounded-md hover:bg-white/10 text-[#cfcfcf] flex items-center justify-center disabled:opacity-60 transition-colors duration-150'
+                        >
+                          <svg 
+                            width='16' 
+                            height='16' 
+                            viewBox='0 0 24 24' 
+                            fill='none' 
+                            stroke='currentColor' 
+                            strokeWidth='2' 
+                            strokeLinecap='round' 
+                            strokeLinejoin='round'
+                            className={balanceLoading ? 'animate-spin' : ''}
+                          >
+                            <path d='M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2'/>
+                          </svg>
+                        </button>
+                      </div>
                     </div>
                     <div className='text-right'>
-                      <div className='text-[12px] text-[#9AA0A6] mb-1'>Balance</div>
-                      <div className='text-[28px] font-extrabold text-[#4599DF] leading-7'>
-            {balanceLoading ? '…' : (balance ?? '—')}
-                      </div>
+                      <div className='text-[11px] text-[#9AA0A6]'>Current plan</div>
+                      <div className='text-[12px] font-medium text-[#E5E5E5]'>{activePlan}</div>
                     </div>
                   </div>
                 </div>
@@ -401,34 +473,21 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
                       <div className='space-y-2 text-[12px] text-foreground/70 mb-4 flex-grow'>
                         <div className='flex items-start gap-2'>
                           <span className='text-[#2CAC58]'>[✓]</span>
-                          <span><strong className='text-foreground/90'>100 credits</strong> per month</span>
+                          <div>
+                            <div><strong className='text-foreground/90'>100 credits</strong> per month</div>
+                            <div className='text-[10px] text-foreground/50 mt-0.5'>≈ 5 full deep wide researches</div>
+                          </div>
                         </div>
                         <div className='flex items-start gap-2'>
                           <span className='text-[#2CAC58]'>[✓]</span>
                           <span>Community support</span>
-                        </div>
-                        <div className='flex items-start gap-2'>
-                          <span className='text-foreground/40'>[✗]</span>
-                          <span className='text-foreground/60'>API & SDK access</span>
-                        </div>
-                        <div className='flex items-start gap-2'>
-                          <span className='text-foreground/40'>[✗]</span>
-                          <span className='text-foreground/60'>Advanced features</span>
-                        </div>
-                        <div className='flex items-start gap-2'>
-                          <span className='text-foreground/40'>[✗]</span>
-                          <span className='text-foreground/60'>Custom integrations</span>
-                        </div>
-                        <div className='flex items-start gap-2'>
-                          <span className='text-foreground/40'>[✗]</span>
-                          <span className='text-foreground/60'>SLA & compliance</span>
                         </div>
                       </div>
                     </div>
 
                     {/* Plus - highlight only if active */}
                     <div className={`${activePlan==='plus' ? 'border-[#2CAC58] bg-gradient-to-br from-[#2CAC58]/10 to-black/20' : 'border-white/20 bg-black/20'} border p-4 md:p-5 flex flex-col relative rounded-xl`}>
-                      {activePlan==='plus' && (<div className='absolute top-0 right-0 bg-[#2CAC58] px-2 py-0.5 text-[10px] font-bold text-white rounded-bl-md'>Active</div>)}
+                      {activePlan==='plus' && (<div className='absolute top-0 right-0 bg-[#2CAC58] px-2 py-0.5 text-[10px] font-bold text-white rounded-bl-md'>Current</div>)}
                       <div className='text-[16px] font-semibold text-foreground/90 mb-1'>Plus</div>
                       <div className='mt-1 mb-4'>
                         <span className='text-[22px] font-bold text-foreground/90'>$15</span>
@@ -436,21 +495,18 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
                       </div>
                       <div className='space-y-2 text-[12px] text-foreground/70 mb-4 flex-grow'>
                         <div className='flex items-start gap-2'>
-                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <span className='#2CAC58'>[✓]</span>
                           <span><strong className='text-foreground/90'>2,000 credits</strong> per month</span>
                         </div>
                         <div className='flex items-start gap-2'>
-                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <span className='#2CAC58'>[✓]</span>
                           <span>API & SDK access</span>
                         </div>
                         <div className='flex items-start gap-2'>
-                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <span className='#2CAC58'>[✓]</span>
                           <span>Priority support</span>
                         </div>
-                        <div className='flex items-start gap-2'>
-                          <span className='text-[#2CAC58]'>[✓]</span>
-                          <span>Advanced features</span>
-                        </div>
+                        
                         <div className='flex items-start gap-2'>
                           <span className='text-foreground/40'>[✗]</span>
                           <span className='text-foreground/60'>Custom integrations</span>
@@ -460,16 +516,24 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
                           <span className='text-foreground/60'>SLA & compliance</span>
                         </div>
                       </div>
-                      <button
-                        onClick={() => gotoCheckout(resolvedProductId15, 'plus')}
-                        disabled={!canBuyPlus}
-                        className={`w-full px-4 py-2.5 text-[12px] font-semibold transition-all rounded-md ${activePlan==='plus' ? 'bg-[#2CAC58] hover:bg-[#25994D] text-white shadow-lg shadow-[#2CAC58]/20 hover:shadow-xl hover:shadow-[#2CAC58]/30' : 'border border-white/20 bg-white/5 hover:bg-white/10 text-foreground/90'}`}
-                      >{activePlan==='plus' ? 'Current plan' : (canBuyPlus ? 'Upgrade' : 'Configure')}</button>
+                      {(activePlan !== 'plus' && activePlan !== 'pro' && activePlan !== 'team') && (
+                        <button
+                          onClick={() => gotoCheckout(resolvedProductId15, 'plus')}
+                          disabled={!canBuyPlus}
+                          className={`w-full px-4 py-2.5 text-[12px] font-semibold transition-all rounded-md border border-white/20 bg-white/5 hover:bg-white/10 text-foreground/90`}
+                        >{canBuyPlus ? 'Upgrade' : 'Configure'}</button>
+                      )}
+                      {(activePlan === 'pro' || activePlan === 'team') && (
+                        <button
+                          onClick={() => requestDowngrade('plus')}
+                          className='mt-2 w-full px-4 py-2 text-[12px] font-medium rounded-md border border-white/20 bg-white/5 hover:bg-white/10 text-foreground/90'
+                        >Downgrade to Plus (next cycle)</button>
+                      )}
                     </div>
 
                     {/* Pro */}
                     <div className={`${activePlan==='pro' ? 'border-[#2CAC58] bg-gradient-to-br from-[#2CAC58]/10 to-black/20' : 'border-white/20 bg-black/20'} border p-4 md:p-5 flex flex-col relative rounded-xl`}>
-                      {activePlan==='pro' && (<div className='absolute top-0 right-0 bg-[#2CAC58] px-2 py-0.5 text-[10px] font-bold text-white rounded-bl-md'>Active</div>)}
+                      {activePlan==='pro' && (<div className='absolute top-0 right-0 bg-[#2CAC58] px-2 py-0.5 text-[10px] font-bold text-white rounded-bl-md'>Current</div>)}
                       <div className='text-[16px] font-semibold text-foreground/90 mb-1'>Pro</div>
                       <div className='mt-1 mb-4'>
                         <span className='text-[22px] font-bold text-foreground/90'>$100</span>
@@ -477,23 +541,20 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
                       </div>
                       <div className='space-y-2 text-[12px] text-foreground/70 mb-4 flex-grow'>
                         <div className='flex items-start gap-2'>
-                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <span className='#2CAC58'>[✓]</span>
                           <span><strong className='text-foreground/90'>15,000 credits</strong> per month</span>
                         </div>
                         <div className='flex items-start gap-2'>
-                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <span className='#2CAC58'>[✓]</span>
                           <span>API & SDK access</span>
                         </div>
                         <div className='flex items-start gap-2'>
-                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <span className='#2CAC58'>[✓]</span>
                           <span>Dedicated support</span>
                         </div>
+                        
                         <div className='flex items-start gap-2'>
-                          <span className='text-[#2CAC58]'>[✓]</span>
-                          <span>All advanced features</span>
-                        </div>
-                        <div className='flex items-start gap-2'>
-                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <span className='#2CAC58'>[✓]</span>
                           <span>Custom integrations</span>
                         </div>
                         <div className='flex items-start gap-2'>
@@ -501,26 +562,35 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
                           <span className='text-foreground/60'>SLA & compliance</span>
                         </div>
                       </div>
-                      <button
-                        onClick={() => gotoCheckout(resolvedProductId100, 'pro')}
-                        disabled={!canBuyPro}
-                        className={`w-full px-4 py-2.5 text-[12px] font-semibold transition-all rounded-md ${activePlan==='pro' ? 'bg-[#2CAC58] hover:bg-[#25994D] text-white shadow-lg shadow-[#2CAC58]/20 hover:shadow-xl hover:shadow-[#2CAC58]/30' : 'border border-white/20 bg-white/5 hover:bg-white/10 text-foreground/90'}`}
-                      >{activePlan==='pro' ? 'Current plan' : (canBuyPro ? 'Upgrade' : 'Configure')}</button>
+                      {(activePlan !== 'pro' && activePlan !== 'team') && (
+                        <button
+                          onClick={() => gotoCheckout(resolvedProductId100, 'pro')}
+                          disabled={!canBuyPro}
+                          className={`w-full px-4 py-2.5 text-[12px] font-semibold transition-all rounded-md border border-white/20 bg-white/5 hover:bg-white/10 text-foreground/90`}
+                        >{canBuyPro ? 'Upgrade' : 'Configure'}</button>
+                      )}
+                      {activePlan === 'team' && (
+                        <button
+                          onClick={() => requestDowngrade('pro')}
+                          className='mt-2 w-full px-4 py-2 text-[12px] font-medium rounded-md border border-white/20 bg-white/5 hover:bg-white/10 text-foreground/90'
+                        >Downgrade to Pro (next cycle)</button>
+                      )}
                     </div>
 
                     {/* Team */}
-                    <div className='border border-white/20 bg-black/20 p-4 md:p-5 flex flex-col rounded-xl'>
+                    <div className={`${activePlan==='team' ? 'border-[#2CAC58] bg-gradient-to-br from-[#2CAC58]/10 to-black/20' : 'border-white/20 bg-black/20'} border p-4 md:p-5 flex flex-col relative rounded-xl`}>
+                      {activePlan==='team' && (<div className='absolute top-0 right-0 bg-[#2CAC58] px-2 py-0.5 text-[10px] font-bold text-white rounded-bl-md'>Current</div>)}
                       <div className='text-[16px] font-semibold text-foreground/90 mb-2'>Team</div>
                       <div className='mt-1 mb-4'>
                         <span className='text-[18px] font-bold text-foreground/90'>Custom</span>
                       </div>
                       <div className='space-y-2 text-[12px] text-foreground/70 mb-4 flex-grow'>
-                        <div className='flex items-start gap-2'><span className='text-[#2CAC58]'>[✓]</span><span><strong className='text-foreground/90'>Unlimited credits</strong></span></div>
-                        <div className='flex items-start gap-2'><span className='text-[#2CAC58]'>[✓]</span><span>API & SDK access</span></div>
-                        <div className='flex items-start gap-2'><span className='text-[#2CAC58]'>[✓]</span><span>24/7 dedicated support</span></div>
-                        <div className='flex items-start gap-2'><span className='text-[#2CAC58]'>[✓]</span><span>All advanced features</span></div>
-                        <div className='flex items-start gap-2'><span className='text-[#2CAC58]'>[✓]</span><span>Custom integrations</span></div>
-                        <div className='flex items-start gap-2'><span className='text-[#2CAC58]'>[✓]</span><span>SLA & compliance</span></div>
+                        <div className='flex items-start gap-2'><span className='#2CAC58'>[✓]</span><span><strong className='text-foreground/90'>Unlimited credits</strong></span></div>
+                        <div className='flex items-start gap-2'><span className='#2CAC58'>[✓]</span><span>API & SDK access</span></div>
+                        <div className='flex items-start gap-2'><span className='#2CAC58'>[✓]</span><span>24/7 dedicated support</span></div>
+                        
+                        <div className='flex items-start gap-2'><span className='#2CAC58'>[✓]</span><span>Custom integrations</span></div>
+                        <div className='flex items-start gap-2'><span className='#2CAC58'>[✓]</span><span>SLA & compliance</span></div>
                       </div>
                       <a href='mailto:guantum@puppyagent.com' className='w-full text-center border border-[#2CAC58] bg-[#2CAC58]/10 hover:bg-[#2CAC58]/20 px-4 py-2.5 text-[12px] font-semibold text-foreground/90 transition-all rounded-md'>
                         Contact Sales

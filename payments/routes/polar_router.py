@@ -13,6 +13,9 @@ class CheckoutSuccessRequest(BaseModel):
     product_id: Optional[str] = None
     price_id: Optional[str] = None
 
+class UpgradeRequest(BaseModel):
+    target: str  # 'pro' | 'plus'
+
 
 def build_polar_router(
     verify_polar_signature: Callable[[Request, bytes], None],
@@ -26,6 +29,7 @@ def build_polar_router(
     pro_default: int,
     plus_default: int,
     logger: logging.Logger,
+    get_email_by_user_id: Optional[Callable[[str], Optional[str]]] = None,
 ):
     router = APIRouter()
     DEBUG = os.getenv("POLAR_WEBHOOK_DEBUG", "0") not in ("0", "false", "False")
@@ -185,7 +189,13 @@ def build_polar_router(
                 provider="polar",
                 status=str(status).lower(),
                 current_period_end=period_end,
-                metadata={"event_id": event_id, "event_type": evt_type},
+                metadata={
+                    "event_id": event_id,
+                    "event_type": evt_type,
+                    "subscription_id": (data.get("subscription_id") or (data.get("subscription") or {}).get("id")),
+                    "product_id": product_id,
+                    "price_id": price_id,
+                },
             )
             paid_like_statuses = {"active", "paid", "succeeded", "success", "completed"}
             if str(status).lower() in paid_like_statuses:
@@ -243,7 +253,13 @@ def build_polar_router(
                 provider="polar",
                 status=str(status).lower(),
                 current_period_end=period_end,
-                metadata={"event_id": event_id, "event_type": evt_type},
+                metadata={
+                    "event_id": event_id,
+                    "event_type": evt_type,
+                    "subscription_id": (data.get("subscription_id") or (data.get("subscription") or {}).get("id")),
+                    "product_id": product_id,
+                    "price_id": price_id,
+                },
             )
             return {"ok": True, "user_id": user_id, "revoked": units, "balance": new_balance}
 
@@ -256,7 +272,11 @@ def build_polar_router(
                 provider="polar",
                 status=str(status).lower(),
                 current_period_end=period_end,
-                metadata={"event_id": event_id, "event_type": evt_type},
+                metadata={
+                    "event_id": event_id,
+                    "event_type": evt_type,
+                    "subscription_id": (data.get("subscription_id") or (data.get("subscription") or {}).get("id")),
+                },
             )
             return {"ok": True, "user_id": user_id, "updated": True}
 
@@ -303,6 +323,261 @@ def build_polar_router(
         update_profile_plan(user_id, plan_for_profile)
 
         return {"ok": True, "user_id": user_id, "granted": units, "balance": new_balance}
+
+    @router.post("/api/polar/upgrade")
+    async def polar_upgrade(req: Request, body: Optional[UpgradeRequest] = None):
+        # Validate user
+        try:
+            user_id = verify_supabase_jwt(req.headers.get("Authorization"))
+        except Exception:
+            if logger:
+                try:
+                    logger.exception("[polar_upgrade] JWT verification failed")
+                except Exception:
+                    ...
+            raise
+
+        target = None
+        try:
+            qp_target = (req.query_params.get("target") or "").strip().lower()
+            body_target = ((body.target if body else None) or "").strip().lower()
+            target = body_target or qp_target
+        except Exception:
+            target = None
+        if target not in ("plus", "pro"):
+            raise HTTPException(status_code=400, detail="Invalid target; must be 'plus' or 'pro'")
+
+        # Resolve user email
+        email: Optional[str] = None
+        try:
+            if get_email_by_user_id:
+                email = get_email_by_user_id(user_id)
+        except Exception:
+            email = None
+        if not email:
+            raise HTTPException(status_code=400, detail="Cannot resolve user email for upgrade")
+
+        # Map target to product/price
+        price_id = None
+        product_id = None
+        if target == "pro":
+            price_id = os.getenv("POLAR_PRICE_ID_PRO")
+            product_id = os.getenv("POLAR_PRODUCT_ID_PRO")
+        else:
+            price_id = os.getenv("POLAR_PRICE_ID_PLUS")
+            product_id = os.getenv("POLAR_PRODUCT_ID_PLUS")
+        if not (price_id or product_id):
+            raise HTTPException(status_code=500, detail="Server misconfigured: POLAR_PRICE_ID_* or POLAR_PRODUCT_ID_* not set")
+
+        # Try direct upgrade via Polar API using saved payment method
+        mode = "direct"
+        sub_id: Optional[str] = None
+        try:
+            from payments.utils import (
+                polar_get_customer_by_email,
+                polar_list_active_subscriptions,
+                polar_update_subscription_price,
+                polar_cancel_subscription,
+                polar_create_checkout,
+            )
+        except Exception:
+            from utils import (
+                polar_get_customer_by_email,
+                polar_list_active_subscriptions,
+                polar_update_subscription_price,
+                polar_cancel_subscription,
+                polar_create_checkout,
+            )
+
+        try:
+            cid = polar_get_customer_by_email(email)
+            if logger:
+                try:
+                    logger.info("[polar_upgrade] customer email=%s -> id=%s", email, cid)
+                except Exception:
+                    ...
+            if cid:
+                subs = polar_list_active_subscriptions(cid)
+                items = subs.get("items") if isinstance(subs, dict) else []
+                if isinstance(items, list) and items:
+                    sub_id = items[0].get("id")
+            # Attempt direct price/product update if we have a subscription id
+            if sub_id:
+                ok = polar_update_subscription_price(sub_id, price_id=price_id, product_id=product_id)
+                if ok:
+                    # Update internal subscription record and plan; credits will be granted via next invoice.paid webhook
+                    update_subscription(
+                        user_id=user_id,
+                        provider="polar",
+                        status="active",
+                        current_period_end=None,
+                        metadata={"upgrade": "direct", "target": target, "subscription_id": sub_id},
+                    )
+                    try:
+                        # Update plan view
+                        if email:
+                            update_profile_plan_by_email(email, target)
+                    except Exception:
+                        ...
+                    return {"ok": True, "mode": mode, "target": target}
+        except HTTPException:
+            raise
+        except Exception:
+            if logger:
+                try:
+                    logger.exception("[polar_upgrade] direct upgrade attempt failed")
+                except Exception:
+                    ...
+
+        # Fallback: cancel current sub and create a checkout session
+        mode = "checkout"
+        checkout_url: Optional[str] = None
+        try:
+            # If we identified an active sub, cancel immediately to allow purchase of new product
+            if sub_id:
+                polar_cancel_subscription(sub_id, at_period_end=False)
+            # Create checkout link
+            success_url = os.getenv("POLAR_SUCCESS_URL") or None
+            checkout_url = polar_create_checkout(
+                product_id=product_id,
+                price_id=price_id,
+                customer_email=email,
+                metadata={"user_id": user_id, "plan": target},
+                success_url=success_url,
+            )
+        except Exception:
+            if logger:
+                try:
+                    logger.exception("[polar_upgrade] checkout fallback error")
+                except Exception:
+                    ...
+        if checkout_url:
+            return {"ok": True, "mode": mode, "checkout_url": checkout_url, "target": target}
+        raise HTTPException(status_code=502, detail="Upgrade failed: unable to update subscription or create checkout")
+
+    @router.post("/api/polar/downgrade")
+    async def polar_downgrade(req: Request, body: Optional[UpgradeRequest] = None):
+        # Validate user
+        try:
+            user_id = verify_supabase_jwt(req.headers.get("Authorization"))
+        except Exception:
+            if logger:
+                try:
+                    logger.exception("[polar_downgrade] JWT verification failed")
+                except Exception:
+                    ...
+            raise
+
+        # Target lower plan
+        target = None
+        try:
+            qp_target = (req.query_params.get("target") or "").strip().lower()
+            body_target = ((body.target if body else None) or "").strip().lower()
+            target = body_target or qp_target
+        except Exception:
+            target = None
+        if target not in ("plus", "pro", "free"):
+            # Support downgrading to plus/pro/free
+            raise HTTPException(status_code=400, detail="Invalid target; must be 'plus', 'pro' or 'free'")
+
+        # Resolve email
+        email: Optional[str] = None
+        try:
+            if get_email_by_user_id:
+                email = get_email_by_user_id(user_id)
+        except Exception:
+            email = None
+        if not email:
+            raise HTTPException(status_code=400, detail="Cannot resolve user email for downgrade")
+
+        # Determine identifiers for target (plus uses configured ids; free -> cancel at period end)
+        price_id = None
+        product_id = None
+        if target == "plus":
+            price_id = os.getenv("POLAR_PRICE_ID_PLUS")
+            product_id = os.getenv("POLAR_PRODUCT_ID_PLUS")
+        elif target == "pro":
+            price_id = os.getenv("POLAR_PRICE_ID_PRO")
+            product_id = os.getenv("POLAR_PRODUCT_ID_PRO")
+
+        # Load helpers
+        try:
+            from payments.utils import (
+                polar_get_customer_by_email,
+                polar_list_active_subscriptions,
+                polar_update_subscription_price,
+                polar_cancel_subscription,
+            )
+        except Exception:
+            from utils import (
+                polar_get_customer_by_email,
+                polar_list_active_subscriptions,
+                polar_update_subscription_price,
+                polar_cancel_subscription,
+            )
+
+        # Find active subscription
+        sub_id: Optional[str] = None
+        try:
+            cid = polar_get_customer_by_email(email)
+            if cid:
+                subs = polar_list_active_subscriptions(cid)
+                items = subs.get("items") if isinstance(subs, dict) else []
+                if isinstance(items, list) and items:
+                    sub_id = items[0].get("id")
+        except Exception:
+            if logger:
+                try:
+                    logger.exception("[polar_downgrade] list active subscription error")
+                except Exception:
+                    ...
+
+        if not sub_id:
+            raise HTTPException(status_code=400, detail="No active subscription to downgrade")
+
+        # Attempt to schedule downgrade at period end:
+        # 1) If target is plus, try immediate price update (providers often prorate). If strict next-cycle is required, cancel at period end.
+        # 2) If target is free, cancel at period end.
+        try:
+            if target == "plus" and (price_id or product_id):
+                ok = polar_update_subscription_price(sub_id, price_id=price_id, product_id=product_id)
+                if ok:
+                    update_subscription(
+                        user_id=user_id,
+                        provider="polar",
+                        status="active",
+                        current_period_end=None,
+                        metadata={"downgrade": "price_update", "target": target, "subscription_id": sub_id},
+                    )
+                    try:
+                        if email:
+                            update_profile_plan_by_email(email, target)
+                    except Exception:
+                        ...
+                    return {"ok": True, "mode": "price_update", "target": target}
+        except Exception:
+            if logger:
+                try:
+                    logger.exception("[polar_downgrade] price update failed; falling back to cancel at period end")
+                except Exception:
+                    ...
+
+        # Fallback: cancel at period end (effective next month)
+        ok_cancel = False
+        try:
+            ok_cancel = polar_cancel_subscription(sub_id, at_period_end=True)
+        except Exception:
+            ok_cancel = False
+        if ok_cancel:
+            update_subscription(
+                user_id=user_id,
+                provider="polar",
+                status="active",
+                current_period_end=None,
+                metadata={"downgrade": "cancel_at_period_end", "target": target, "subscription_id": sub_id},
+            )
+            return {"ok": True, "mode": "cancel_at_period_end", "target": target}
+        raise HTTPException(status_code=502, detail="Downgrade failed")
 
     return router
 

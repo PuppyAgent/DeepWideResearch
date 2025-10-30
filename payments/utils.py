@@ -34,6 +34,171 @@ SUPABASE_JWKS_URL = os.getenv("SUPABASE_JWKS_URL") or (
 SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
 
 _jwks_cache: Optional[Dict[str, Any]] = None
+# ===================== Polar REST Helpers =====================
+POLAR_ACCESS_TOKEN = os.getenv("POLAR_ACCESS_TOKEN")
+POLAR_API_BASE = os.getenv("POLAR_API_BASE") or "https://api.polar.sh"
+
+def _polar_headers() -> Dict[str, str]:
+    if not POLAR_ACCESS_TOKEN:
+        raise HTTPException(status_code=500, detail="Server misconfigured: POLAR_ACCESS_TOKEN not set")
+    return {
+        "Authorization": f"Bearer {POLAR_ACCESS_TOKEN}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+def polar_get_customer_by_email(email: str, timeout: int = 8) -> Optional[str]:
+    try:
+        url = f"{POLAR_API_BASE.rstrip('/')}/v1/customers"
+        resp = requests.get(url, headers=_polar_headers(), params={"email": email}, timeout=timeout)
+        if not resp.ok:
+            try:
+                logger.warning("polar_get_customer_by_email: status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", ""))
+            except Exception:
+                ...
+            return None
+        data = resp.json()
+        # Accept either {items:[{id:...}]} or list
+        items = data.get("items") if isinstance(data, dict) else (data if isinstance(data, list) else [])
+        if isinstance(items, list) and items:
+            cid = items[0].get("id")
+            return str(cid) if cid else None
+    except Exception:
+        try:
+            logger.exception("polar_get_customer_by_email: error")
+        except Exception:
+            ...
+    return None
+
+def polar_list_active_subscriptions(customer_id: str, timeout: int = 8) -> Dict[str, Any]:
+    try:
+        url = f"{POLAR_API_BASE.rstrip('/')}/v1/subscriptions"
+        resp = requests.get(url, headers=_polar_headers(), params={"customer_id": customer_id, "status": "active"}, timeout=timeout)
+        if not resp.ok:
+            try:
+                logger.warning("polar_list_active_subscriptions: status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", ""))
+            except Exception:
+                ...
+            return {"items": []}
+        data = resp.json()
+        return data if isinstance(data, dict) else {"items": data if isinstance(data, list) else []}
+    except Exception:
+        try:
+            logger.exception("polar_list_active_subscriptions: error")
+        except Exception:
+            ...
+        return {"items": []}
+
+def polar_update_subscription_price(subscription_id: str, price_id: Optional[str] = None, product_id: Optional[str] = None, timeout: int = 10) -> bool:
+    try:
+        url = f"{POLAR_API_BASE.rstrip('/')}/v1/subscriptions/{subscription_id}/update"
+        payload: Dict[str, Any] = {}
+        if price_id:
+            payload["price_id"] = price_id
+        if product_id:
+            payload["product_id"] = product_id
+        if not payload:
+            return False
+        resp = requests.post(url, headers=_polar_headers(), json=payload, timeout=timeout)
+        ok = bool(getattr(resp, "ok", False))
+        if not ok:
+            try:
+                logger.warning("polar_update_subscription_price: status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", ""))
+            except Exception:
+                ...
+        return ok
+    except Exception:
+        try:
+            logger.exception("polar_update_subscription_price: error")
+        except Exception:
+            ...
+        return False
+
+def polar_cancel_subscription(subscription_id: str, at_period_end: bool = False, timeout: int = 10) -> bool:
+    try:
+        url = f"{POLAR_API_BASE.rstrip('/')}/v1/subscriptions/{subscription_id}/cancel"
+        payload = {"at_period_end": bool(at_period_end)}
+        resp = requests.post(url, headers=_polar_headers(), json=payload, timeout=timeout)
+        ok = bool(getattr(resp, "ok", False))
+        if not ok:
+            try:
+                logger.warning("polar_cancel_subscription: status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", ""))
+            except Exception:
+                ...
+        return ok
+    except Exception:
+        try:
+            logger.exception("polar_cancel_subscription: error")
+        except Exception:
+            ...
+        return False
+
+def polar_create_checkout(product_id: Optional[str] = None, price_id: Optional[str] = None, customer_email: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None, success_url: Optional[str] = None, timeout: int = 10) -> Optional[str]:
+    try:
+        url = f"{POLAR_API_BASE.rstrip('/')}/v1/checkouts"
+        payload: Dict[str, Any] = {}
+        if product_id:
+            payload["product_id"] = product_id
+        if price_id:
+            payload["price_id"] = price_id
+        if customer_email:
+            payload["customer_email"] = customer_email
+        if metadata:
+            payload["metadata"] = metadata
+        if success_url:
+            payload["success_url"] = success_url
+        resp = requests.post(url, headers=_polar_headers(), json=payload, timeout=timeout)
+        if not getattr(resp, "ok", False):
+            try:
+                logger.warning("polar_create_checkout: status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", ""))
+            except Exception:
+                ...
+            return None
+        data = resp.json()
+        # Accept 'url' or 'checkout_url'
+        checkout_url = (data.get("url") or data.get("checkout_url")) if isinstance(data, dict) else None
+        return str(checkout_url) if checkout_url else None
+    except Exception:
+        try:
+            logger.exception("polar_create_checkout: error")
+        except Exception:
+            ...
+        return None
+
+def get_email_by_user_id(user_id: str) -> Optional[str]:
+    # Try profiles table first
+    try:
+        resp = _supabase_rest_get("/rest/v1/profiles", params={"user_id": f"eq.{user_id}", "select": "email", "limit": "1"})
+        if getattr(resp, "ok", False):
+            arr = resp.json()
+            if isinstance(arr, list) and arr:
+                email = arr[0].get("email")
+                if email:
+                    return str(email)
+    except Exception:
+        try:
+            logger.exception("get_email_by_user_id: profiles lookup error")
+        except Exception:
+            ...
+    # Fallback to admin users
+    try:
+        if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
+            url = f"{SUPABASE_URL.rstrip('/')}/auth/v1/admin/users/{user_id}"
+            headers = {
+                "apikey": SUPABASE_SERVICE_ROLE_KEY,
+                "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+            }
+            resp2 = requests.get(url, headers=headers, timeout=6)
+            if getattr(resp2, "ok", False):
+                data = resp2.json()
+                email = data.get("email") if isinstance(data, dict) else None
+                return str(email) if email else None
+    except Exception:
+        try:
+            logger.exception("get_email_by_user_id: admin lookup error")
+        except Exception:
+            ...
+    return None
 
 def _supabase_auth_headers() -> Dict[str, str]:
     if not SUPABASE_SERVICE_ROLE_KEY:
