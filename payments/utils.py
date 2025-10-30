@@ -5,6 +5,7 @@ import json
 import requests
 import hashlib
 import hmac
+import base64
 import logging
 from datetime import datetime, timezone
 
@@ -248,6 +249,7 @@ def determine_units_for_purchase(product_id: Optional[str], price_id: Optional[s
 
 # ===================== Webhook Signature =====================
 POLAR_WEBHOOK_SECRET = os.getenv("POLAR_WEBHOOK_SECRET")
+POLAR_WEBHOOK_DEBUG = os.getenv("POLAR_WEBHOOK_DEBUG", "0") not in ("0", "false", "False")
 
 def verify_polar_signature(req: Request, raw_body: bytes) -> None:
     if not POLAR_WEBHOOK_SECRET:
@@ -272,15 +274,48 @@ def verify_polar_signature(req: Request, raw_body: bytes) -> None:
     if not sig:
         raise HTTPException(status_code=403, detail="Missing Polar signature header")
 
-    header_sig = sig.strip().strip('"\'').lower()
-    # Some send formats like "sha256=abcdef..." — support that as well
-    if "=" in header_sig:
-        parts = header_sig.split("=", 1)
+    # Normalize candidate signature
+    header_sig_raw = sig.strip().strip('"\'')
+    header_sig_lower = header_sig_raw.lower()
+    # Support formats like "sha256=abcdef..."
+    if "=" in header_sig_lower:
+        parts = header_sig_lower.split("=", 1)
         if len(parts) == 2 and parts[1]:
-            header_sig = parts[1]
+            header_sig_lower = parts[1]
+            header_sig_raw = parts[1]
 
-    digest = hmac.new(POLAR_WEBHOOK_SECRET.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
-    if not hmac.compare_digest(header_sig, digest):
+    # Compute digests
+    mac = hmac.new(POLAR_WEBHOOK_SECRET.encode("utf-8"), raw_body, hashlib.sha256)
+    digest_hex = mac.hexdigest()
+    digest_bytes = mac.digest()
+    digest_b64_std = base64.b64encode(digest_bytes).decode("utf-8").strip()
+    digest_b64_url = base64.urlsafe_b64encode(digest_bytes).decode("utf-8").strip().rstrip("=")
+
+    valid = False
+    # Accept lowercase hex compare
+    if hmac.compare_digest(header_sig_lower, digest_hex):
+        valid = True
+    # Accept uppercase hex
+    if not valid and hmac.compare_digest(header_sig_raw.upper(), digest_hex.upper()):
+        valid = True
+    # Accept standard base64
+    if not valid and hmac.compare_digest(header_sig_raw, digest_b64_std):
+        valid = True
+    # Accept urlsafe base64 (with and without padding)
+    if not valid and (
+        hmac.compare_digest(header_sig_raw, digest_b64_url)
+        or hmac.compare_digest(header_sig_raw.rstrip("="), digest_b64_std.rstrip("=") )
+    ):
+        valid = True
+
+    if POLAR_WEBHOOK_DEBUG and not valid:
+        logger.warning(
+            "[polar_signature] mismatch: header=%s hex=%s b64=%s b64url=%s",
+            header_sig_raw[:64], digest_hex[:64], digest_b64_std[:64], digest_b64_url[:64]
+        )
+
+    if not valid:
+
         raise HTTPException(status_code=403, detail="Invalid webhook signature")
 
 
