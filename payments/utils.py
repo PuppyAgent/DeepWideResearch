@@ -47,10 +47,42 @@ def _polar_headers() -> Dict[str, str]:
         "Accept": "application/json",
     }
 
+def _polar_request(method: str, path: str, *, params: Optional[Dict[str, Any]] = None, json_body: Optional[Dict[str, Any]] = None, timeout: int = 8):
+    """Perform a Polar API request with DNS fallback.
+    If POLAR_API_BASE points to sandbox and DNS fails, retry once against production base.
+    """
+    base = (POLAR_API_BASE or "https://api.polar.sh").rstrip('/')
+    url = f"{base}{path}"
+    try:
+        return requests.request(method.upper(), url, headers=_polar_headers(), params=params, json=json_body, timeout=timeout)
+    except requests.exceptions.RequestException as e:
+        # DNS failover only when sandbox base is used
+        try:
+            is_dns = any(kw in str(e) for kw in ("NameResolutionError", "Failed to resolve", "gaierror"))
+            if is_dns and ("sandbox" in base):
+                try:
+                    logger.warning("polar_request: DNS failed for sandbox, retrying with production base")
+                except Exception:
+                    ...
+                fallback_base = "https://api.polar.sh"
+                url2 = f"{fallback_base}{path}"
+                return requests.request(method.upper(), url2, headers=_polar_headers(), params=params, json=json_body, timeout=timeout)
+        except Exception:
+            ...
+        raise
+
+def _polar_sdk_client():
+    try:
+        from polar_sdk import Polar  # type: ignore
+        if not POLAR_ACCESS_TOKEN:
+            return None
+        return Polar(access_token=POLAR_ACCESS_TOKEN)
+    except Exception:
+        return None
+
 def polar_get_customer_by_email(email: str, timeout: int = 8) -> Optional[str]:
     try:
-        url = f"{POLAR_API_BASE.rstrip('/')}/v1/customers"
-        resp = requests.get(url, headers=_polar_headers(), params={"email": email}, timeout=timeout)
+        resp = _polar_request("GET", "/v1/customers", params={"email": email}, timeout=timeout)
         if not resp.ok:
             try:
                 logger.warning("polar_get_customer_by_email: status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", ""))
@@ -72,8 +104,7 @@ def polar_get_customer_by_email(email: str, timeout: int = 8) -> Optional[str]:
 
 def polar_list_active_subscriptions(customer_id: str, timeout: int = 8) -> Dict[str, Any]:
     try:
-        url = f"{POLAR_API_BASE.rstrip('/')}/v1/subscriptions"
-        resp = requests.get(url, headers=_polar_headers(), params={"customer_id": customer_id, "status": "active"}, timeout=timeout)
+        resp = _polar_request("GET", "/v1/subscriptions", params={"customer_id": customer_id, "status": "active"}, timeout=timeout)
         if not resp.ok:
             try:
                 logger.warning("polar_list_active_subscriptions: status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", ""))
@@ -91,7 +122,6 @@ def polar_list_active_subscriptions(customer_id: str, timeout: int = 8) -> Dict[
 
 def polar_update_subscription_price(subscription_id: str, price_id: Optional[str] = None, product_id: Optional[str] = None, timeout: int = 10) -> bool:
     try:
-        url = f"{POLAR_API_BASE.rstrip('/')}/v1/subscriptions/{subscription_id}/update"
         payload: Dict[str, Any] = {}
         if price_id:
             payload["price_id"] = price_id
@@ -99,7 +129,7 @@ def polar_update_subscription_price(subscription_id: str, price_id: Optional[str
             payload["product_id"] = product_id
         if not payload:
             return False
-        resp = requests.post(url, headers=_polar_headers(), json=payload, timeout=timeout)
+        resp = _polar_request("POST", f"/v1/subscriptions/{subscription_id}/update", json_body=payload, timeout=timeout)
         ok = bool(getattr(resp, "ok", False))
         if not ok:
             try:
@@ -116,9 +146,8 @@ def polar_update_subscription_price(subscription_id: str, price_id: Optional[str
 
 def polar_cancel_subscription(subscription_id: str, at_period_end: bool = False, timeout: int = 10) -> bool:
     try:
-        url = f"{POLAR_API_BASE.rstrip('/')}/v1/subscriptions/{subscription_id}/cancel"
         payload = {"at_period_end": bool(at_period_end)}
-        resp = requests.post(url, headers=_polar_headers(), json=payload, timeout=timeout)
+        resp = _polar_request("POST", f"/v1/subscriptions/{subscription_id}/cancel", json_body=payload, timeout=timeout)
         ok = bool(getattr(resp, "ok", False))
         if not ok:
             try:
@@ -135,7 +164,39 @@ def polar_cancel_subscription(subscription_id: str, at_period_end: bool = False,
 
 def polar_create_checkout(product_id: Optional[str] = None, price_id: Optional[str] = None, customer_email: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None, success_url: Optional[str] = None, timeout: int = 10) -> Optional[str]:
     try:
-        url = f"{POLAR_API_BASE.rstrip('/')}/v1/checkouts"
+        # Prefer official SDK if available
+        client = _polar_sdk_client()
+        if client is not None:
+            try:
+                req: Dict[str, Any] = {}
+                if product_id:
+                    req["products"] = [product_id]
+                if price_id:
+                    # Some SDKs accept prices list; fall back to products elsewhere
+                    req["prices"] = [price_id]
+                if customer_email:
+                    req["customer_email"] = customer_email
+                if metadata:
+                    req["metadata"] = metadata
+                if success_url:
+                    req["success_url"] = success_url
+                with client as polar:
+                    res = polar.checkouts.create(request=req)  # type: ignore[attr-defined]
+                # Try common access patterns
+                url = None
+                try:
+                    url = getattr(res, "url", None)
+                except Exception:
+                    url = None
+                if not url and isinstance(res, dict):
+                    url = res.get("url") or res.get("checkout_url")
+                if url:
+                    return str(url)
+            except Exception:
+                try:
+                    logger.warning("polar_create_checkout (sdk) failed; falling back to REST")
+                except Exception:
+                    ...
         payload: Dict[str, Any] = {}
         if product_id:
             payload["product_id"] = product_id
@@ -147,7 +208,7 @@ def polar_create_checkout(product_id: Optional[str] = None, price_id: Optional[s
             payload["metadata"] = metadata
         if success_url:
             payload["success_url"] = success_url
-        resp = requests.post(url, headers=_polar_headers(), json=payload, timeout=timeout)
+        resp = _polar_request("POST", "/v1/checkouts", json_body=payload, timeout=timeout)
         if not getattr(resp, "ok", False):
             try:
                 logger.warning("polar_create_checkout: status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", ""))
