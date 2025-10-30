@@ -112,10 +112,15 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
     }
     const userId = session?.user?.id
     if (userId) {
+
+      // Send multiple encodings to maximize compatibility
       url += `&metadata.user_id=${encodeURIComponent(userId)}`
+      url += `&metadata[user_id]=${encodeURIComponent(userId)}`
+      url += `&metadata[supabase_user_id]=${encodeURIComponent(userId)}`
     }
     if (planKey) {
       url += `&metadata.plan=${encodeURIComponent(planKey)}`
+      url += `&metadata[plan]=${encodeURIComponent(planKey)}`
     }
     try {
       const successUrl = `${window.location.origin}/?success=1`
