@@ -192,6 +192,35 @@ def update_profile_plan(user_id: str, plan: str) -> None:
     except Exception:
         pass
 
+def update_profile_plan_by_email(email: str, plan: str) -> None:
+    if not email:
+        return
+    try:
+        resp = _supabase_rest_patch(f"/rest/v1/profiles?email=eq.{email}", {"plan": plan})
+        if resp is not None and not getattr(resp, "ok", False):
+            try:
+                logger.warning("update_profile_plan_by_email: email filter patch failed status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", ""))
+            except Exception:
+                ...
+        applied = False
+        if resp is not None and getattr(resp, "ok", False):
+            try:
+                body = resp.json()
+                if isinstance(body, list) and len(body) > 0:
+                    applied = True
+            except Exception:
+                applied = True
+        if not applied:
+            # Fallback: resolve user_id by email and reuse user_id-based updater
+            try:
+                uid = find_user_by_email(email)
+            except Exception:
+                uid = None
+            if uid:
+                update_profile_plan(uid, plan)
+    except Exception:
+        pass
+
 def find_user_by_email(email: Optional[str]) -> Optional[str]:
     if not email:
         return None

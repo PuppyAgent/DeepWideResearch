@@ -90,14 +90,16 @@ def build_polar_router(
             except Exception:
                 ...
 
+        # Always extract email (even when user_id is present), to drive plan updates by email
+        email = (
+            (data.get("customer") or {}).get("email")
+            or (data.get("buyer") or {}).get("email")
+            or data.get("email")
+            or payload.get("customerEmail")
+            or meta.get("email")
+        )
+
         if not user_id:
-            email = (
-                (data.get("customer") or {}).get("email")
-                or (data.get("buyer") or {}).get("email")
-                or data.get("email")
-                or payload.get("customerEmail")
-                or meta.get("email")
-            )
             user_id = find_user_by_email(email)
             if DEBUG and logger:
                 try:
@@ -156,7 +158,8 @@ def build_polar_router(
             )
             if str(status).lower() in ("active", "paid"):
                 plan_for_profile = "pro" if units >= pro_default else ("plus" if units >= plus_default else "free")
-                update_profile_plan(user_id, plan_for_profile)
+                if email:
+                    update_profile_plan(email, plan_for_profile)
 
             return {"ok": True, "user_id": user_id, "granted": units, "balance": new_balance}
 
