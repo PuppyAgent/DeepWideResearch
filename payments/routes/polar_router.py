@@ -5,6 +5,7 @@ import time
 import logging
 
 from fastapi import APIRouter, Request, HTTPException
+from jose import jwt as jose_jwt
 from pydantic import BaseModel
 
 
@@ -355,6 +356,20 @@ def build_polar_router(
         except Exception:
             email = None
         if not email:
+            # Fallback: extract from JWT claims (unverified) to avoid strict dependency on service role
+            try:
+                auth = req.headers.get("Authorization") or ""
+                if auth.lower().startswith("bearer "):
+                    token = auth.split(" ", 1)[1].strip()
+                    claims = jose_jwt.get_unverified_claims(token)
+                    email = (
+                        claims.get("email")
+                        or (claims.get("user_metadata") or {}).get("email")
+                        or (claims.get("app_metadata") or {}).get("email")
+                    )
+            except Exception:
+                email = None
+        if not email:
             raise HTTPException(status_code=400, detail="Cannot resolve user email for upgrade")
 
         # Map target to product/price
@@ -487,6 +502,20 @@ def build_polar_router(
                 email = get_email_by_user_id(user_id)
         except Exception:
             email = None
+        if not email:
+            # Fallback: extract from JWT claims (unverified)
+            try:
+                auth = req.headers.get("Authorization") or ""
+                if auth.lower().startswith("bearer "):
+                    token = auth.split(" ", 1)[1].strip()
+                    claims = jose_jwt.get_unverified_claims(token)
+                    email = (
+                        claims.get("email")
+                        or (claims.get("user_metadata") or {}).get("email")
+                        or (claims.get("app_metadata") or {}).get("email")
+                    )
+            except Exception:
+                email = None
         if not email:
             raise HTTPException(status_code=400, detail="Cannot resolve user email for downgrade")
 
