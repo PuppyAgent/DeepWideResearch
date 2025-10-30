@@ -265,6 +265,7 @@ def verify_polar_signature(req: Request, raw_body: bytes) -> None:
         "X-Polar-Signature",
         "x-polar-signature",
         "X-POLAR-SIGNATURE",
+        "webhook-signature",
     ]
     sig = None
     used_header_name = None
@@ -291,12 +292,26 @@ def verify_polar_signature(req: Request, raw_body: bytes) -> None:
             header_sig_lower = parts[1]
             header_sig_raw = parts[1]
 
-    # Compute digests
+    # Compute digests (legacy over raw body)
     mac = hmac.new(POLAR_WEBHOOK_SECRET.encode("utf-8"), raw_body, hashlib.sha256)
     digest_hex = mac.hexdigest()
     digest_bytes = mac.digest()
     digest_b64_std = base64.b64encode(digest_bytes).decode("utf-8").strip()
     digest_b64_url = base64.urlsafe_b64encode(digest_bytes).decode("utf-8").strip().rstrip("=")
+
+    # Compute digests with timestamp scheme: HMAC(secret, f"{timestamp}.{body}") → base64
+    ts = req.headers.get("webhook-timestamp") or req.headers.get("Webhook-Timestamp")
+    digest_ts_b64_std = None
+    digest_ts_b64_url = None
+    if ts is not None:
+        try:
+            msg = (str(ts).strip()).encode("utf-8") + b"." + (raw_body or b"")
+            mac_ts = hmac.new(POLAR_WEBHOOK_SECRET.encode("utf-8"), msg, hashlib.sha256)
+            digest_ts_b64_std = base64.b64encode(mac_ts.digest()).decode("utf-8").strip()
+            digest_ts_b64_url = base64.urlsafe_b64encode(mac_ts.digest()).decode("utf-8").strip().rstrip("=")
+        except Exception:
+            digest_ts_b64_std = None
+            digest_ts_b64_url = None
 
     valid = False
     # Accept lowercase hex compare
@@ -315,14 +330,29 @@ def verify_polar_signature(req: Request, raw_body: bytes) -> None:
     ):
         valid = True
 
+    # Accept Polar v1 timestamp scheme in 'webhook-signature': 'v1,<b64>' or 'v1=<b64>'
+    if not valid and used_header_name and used_header_name.lower() == "webhook-signature" and (digest_ts_b64_std or digest_ts_b64_url):
+        provided = header_sig_raw
+        if "," in provided:
+            provided = provided.split(",", 1)[1].strip()
+        elif "=" in provided:
+            provided = provided.split("=", 1)[1].strip()
+        if digest_ts_b64_std and hmac.compare_digest(provided, digest_ts_b64_std):
+            valid = True
+        elif digest_ts_b64_url and hmac.compare_digest(provided.rstrip("="), (digest_ts_b64_url or "").rstrip("=")):
+            valid = True
+
     if POLAR_WEBHOOK_DEBUG and not valid:
         logger.warning(
-            "[polar_signature] mismatch: headerName=%s headerVal=%s hex=%s b64=%s b64url=%s",
+            "[polar_signature] mismatch: headerName=%s headerVal=%s hex=%s b64=%s b64url=%s ts_b64=%s ts_b64url=%s ts=%s",
             used_header_name,
             header_sig_raw[:128],
-            digest_hex[:64],
-            digest_b64_std[:64],
-            digest_b64_url[:64]
+            (digest_hex or '')[:64],
+            (digest_b64_std or '')[:64],
+            (digest_b64_url or '')[:64],
+            (digest_ts_b64_std or '')[:64],
+            (digest_ts_b64_url or '')[:64],
+            str(ts)
         )
 
     if not valid:
