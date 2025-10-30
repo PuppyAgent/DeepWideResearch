@@ -161,7 +161,20 @@ def update_subscription(user_id: str, provider: str, status: Optional[str], curr
 
 def update_profile_plan(user_id: str, plan: str) -> None:
     try:
-        _supabase_rest_patch(f"/rest/v1/profiles?user_id=eq.{user_id}", {"plan": plan})
+        # Try profiles.user_id first
+        resp = _supabase_rest_patch(f"/rest/v1/profiles?user_id=eq.{user_id}", {"plan": plan})
+        applied = False
+        if resp is not None and getattr(resp, "ok", False):
+            try:
+                body = resp.json()
+                if isinstance(body, list) and len(body) > 0:
+                    applied = True
+            except Exception:
+                # If representation not returned, assume applied
+                applied = True
+        if not applied:
+            # Fallback to profiles.id (many Supabase setups use id as auth uid)
+            _supabase_rest_patch(f"/rest/v1/profiles?id=eq.{user_id}", {"plan": plan})
     except Exception:
         pass
 
