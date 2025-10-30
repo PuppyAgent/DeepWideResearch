@@ -167,6 +167,11 @@ def update_profile_plan(user_id: str, plan: str) -> None:
     try:
         # Try profiles.user_id first
         resp = _supabase_rest_patch(f"/rest/v1/profiles?user_id=eq.{user_id}", {"plan": plan})
+        if resp is not None and not getattr(resp, "ok", False):
+            try:
+                logger.warning("update_profile_plan: user_id filter patch failed status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", ""))
+            except Exception:
+                ...
         applied = False
         if resp is not None and getattr(resp, "ok", False):
             try:
@@ -178,7 +183,12 @@ def update_profile_plan(user_id: str, plan: str) -> None:
                 applied = True
         if not applied:
             # Fallback to profiles.id (many Supabase setups use id as auth uid)
-            _supabase_rest_patch(f"/rest/v1/profiles?id=eq.{user_id}", {"plan": plan})
+            resp2 = _supabase_rest_patch(f"/rest/v1/profiles?id=eq.{user_id}", {"plan": plan})
+            if resp2 is not None and not getattr(resp2, "ok", False):
+                try:
+                    logger.warning("update_profile_plan: id filter patch failed status=%s body=%s", getattr(resp2, "status_code", None), getattr(resp2, "text", ""))
+                except Exception:
+                    ...
     except Exception:
         pass
 

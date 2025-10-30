@@ -56,12 +56,12 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
   const resolvedProductId100 = productId100 || parsedProductIds?.['100'] || parsedProductIds?.['pro'] || parsedProductIds?.['PRO'] || null
   const canBuyPlus = !!resolvedProductId15
   const canBuyPro = !!resolvedProductId100
-  const [activePlan, setActivePlan] = React.useState<'free' | 'plus' | 'pro' | 'enterprise'>('free')
+  const [activePlan, setActivePlan] = React.useState<'free' | 'plus' | 'pro' | 'team'>('free')
 
   React.useEffect(() => {
     try {
       const saved = typeof window !== 'undefined' ? localStorage.getItem('dwr_active_plan') : null
-      if (saved === 'free' || saved === 'plus' || saved === 'pro' || saved === 'enterprise') {
+      if (saved === 'free' || saved === 'plus' || saved === 'pro' || saved === 'team') {
         setActivePlan(saved)
       }
     } catch {}
@@ -508,9 +508,9 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
                       >{activePlan==='pro' ? 'Current plan' : (canBuyPro ? 'Upgrade' : 'Configure')}</button>
                     </div>
 
-                    {/* Enterprise */}
+                    {/* Team */}
                     <div className='border border-white/20 bg-black/20 p-4 md:p-5 flex flex-col rounded-xl'>
-                      <div className='text-[16px] font-semibold text-foreground/90 mb-2'>Enterprise</div>
+                      <div className='text-[16px] font-semibold text-foreground/90 mb-2'>Team</div>
                       <div className='mt-1 mb-4'>
                         <span className='text-[18px] font-bold text-foreground/90'>Custom</span>
                       </div>

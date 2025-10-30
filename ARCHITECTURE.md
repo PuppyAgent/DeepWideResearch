@@ -33,7 +33,7 @@
   - Webhook 更新 `subscriptions`，并在周期开始/支付成功时发放 credits
 
 - 支付 `Polar`（Plus 月订阅）
-  - Plus 档位（$10/月）
+  - Plus 档位（$15/月）
   - 前端跳转 Polar 托管 Checkout，或服务端用 TS SDK 动态创建 Checkout 会话
   - Webhook 成功事件触发每月发放固定 credits（幂等）
 
@@ -75,7 +75,7 @@
 - Webhook 更新 `subscriptions`，并在支付成功/周期开始时发放 credits（正向 `delta`）
 
 ### Polar（支付）
-- Plus 档：$10/月；仅做“订阅→发放 credits”的极简流程
+- Plus 档：$15/月；仅做“订阅→发放 credits”的极简流程
 - 事件来源：Polar Webhook（订阅创建/续费/发票已支付）
 - 后端：验签 → 识别 `user_id`（优先用 `metadata.user_id`，否则按邮箱匹配）→ `sp_grant_credits`
 - 可选：同步 `subscriptions` 状态与 `current_period_end`
@@ -92,7 +92,7 @@ create table if not exists public.profiles (
   user_id uuid primary key references auth.users (id) on delete cascade,
   email text not null,
   role text not null default 'user' check (role in ('user','admin')),
-  plan text not null default 'free' check (plan in ('free','pro','team')),
+  plan text not null default 'free' check (plan in ('free','plus','pro','team')),
   stripe_customer_id text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -407,7 +407,7 @@ create table if not exists public.profiles (
   user_id uuid primary key references auth.users (id) on delete cascade,
   email text not null,
   role text not null default 'user' check (role in ('user','admin')),
-  plan text not null default 'free' check (plan in ('free','pro','team')),
+  plan text not null default 'free' check (plan in ('free','plus','pro','team')),
   stripe_customer_id text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -783,7 +783,7 @@ API Key 场景：
 - Webhook 接收事件：更新 `subscriptions`、在账本中发放月度额度 `sp_grant_credits`
 
 3A) Polar Plus 月订阅（极简）
-- 前端跳转 Polar 托管 Checkout（Plus $10/月）
+- 前端跳转 Polar 托管 Checkout（Plus $15/月）
 - 支付成功/续费 → Polar 推送 Webhook 到后端 `/api/polar/webhook`
 - 后端验签（`POLAR_WEBHOOK_SECRET`），优先使用 `metadata.user_id` 识别用户；如无则按订单邮箱匹配 Supabase 用户
 - 发放：`sp_grant_credits(user_id, POLAR_PLUS_CREDITS, request_id='polar_<event_id>')`（幂等）
