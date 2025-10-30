@@ -12,12 +12,13 @@ from jose import jwt
 from fastapi import HTTPException, Request
 from dotenv import load_dotenv
 
-# Load env (root .env then payments-level .env)
+# Load env (payments-level .env only; optional override via PAYMENTS_ENV_FILE)
 try:
     from pathlib import Path
-    project_root = Path(__file__).parent.parent
-    load_dotenv(dotenv_path=project_root / '.env', override=False)
     load_dotenv(dotenv_path=Path(__file__).parent / '.env', override=False)
+    env_override = os.getenv("PAYMENTS_ENV_FILE")
+    if env_override:
+        load_dotenv(dotenv_path=env_override, override=False)
 except Exception:
     pass
 

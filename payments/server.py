@@ -6,24 +6,42 @@ from urllib.parse import urlparse
 import os
 import logging
 
-from payments.routes.polar_router import build_polar_router
-from payments.utils import (
-    verify_polar_signature,
-    determine_units_for_purchase,
-    grant_credits,
-    update_subscription,
-    update_profile_plan,
-    find_user_by_email,
-    verify_supabase_jwt,
-    POLAR_PRO_CREDITS_DEFAULT,
-    POLAR_PLUS_CREDITS_DEFAULT,
-)
-
-# Load environment from .env (root then payments folder)
 try:
-    project_root = Path(__file__).parent.parent
-    load_dotenv(dotenv_path=project_root / '.env', override=False)
-    load_dotenv(dotenv_path=Path(__file__).parent / '.env', override=False)
+    from payments.routes.polar_router import build_polar_router
+    from payments.utils import (
+        verify_polar_signature,
+        determine_units_for_purchase,
+        grant_credits,
+        update_subscription,
+        update_profile_plan,
+        find_user_by_email,
+        verify_supabase_jwt,
+        POLAR_PRO_CREDITS_DEFAULT,
+        POLAR_PLUS_CREDITS_DEFAULT,
+    )
+except ImportError:
+    # Allow running from within the payments folder: `uvicorn server:app ...`
+    from routes.polar_router import build_polar_router
+    from utils import (
+        verify_polar_signature,
+        determine_units_for_purchase,
+        grant_credits,
+        update_subscription,
+        update_profile_plan,
+        find_user_by_email,
+        verify_supabase_jwt,
+        POLAR_PRO_CREDITS_DEFAULT,
+        POLAR_PLUS_CREDITS_DEFAULT,
+    )
+
+# Load environment from payments/.env only (standalone)
+try:
+    env_dir = Path(__file__).parent
+    load_dotenv(dotenv_path=env_dir / '.env', override=False)
+    # Optional: allow overriding env file via PAYMENTS_ENV_FILE
+    env_override = os.getenv("PAYMENTS_ENV_FILE")
+    if env_override:
+        load_dotenv(dotenv_path=env_override, override=False)
 except Exception:
     pass
 
