@@ -141,7 +141,8 @@ app.include_router(
 if __name__ == "__main__":
     import uvicorn
     import socket
-    port_env = os.getenv("PAYMENTS_PORT")
+    # Respect platform PORT (e.g., Railway) and fallback to PAYMENTS_PORT/8100
+    port_env = os.getenv("PAYMENTS_PORT") or os.getenv("PORT")
     port = int(port_env) if port_env else 8100
     host = os.getenv("HOST", "0.0.0.0")
     allow_fallback = os.getenv("ALLOW_PORT_FALLBACK", "1") not in ("0", "false", "False")
@@ -162,6 +163,7 @@ if __name__ == "__main__":
                 port = candidate
                 break
 
+    print(f"Payments Service listening on http://{host}:{port}")
     uvicorn.run(app, host=host, port=port, log_level="info")
 
 
