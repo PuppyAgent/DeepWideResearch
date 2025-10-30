@@ -38,6 +38,8 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
   const [animateIn, setAnimateIn] = React.useState(false)
   const hasLoadedRef = React.useRef(false)
   const [activeTab, setActiveTab] = React.useState<'credits' | 'api-keys'>('credits')
+  const [dwPlusLabel, setDwPlusLabel] = React.useState('downgrade')
+  const [dwProLabel, setDwProLabel] = React.useState('downgrade')
   const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
   const paymentsBase = process.env.NEXT_PUBLIC_PAYMENTS_API_URL || apiBase
   const paymentsFallback = process.env.NEXT_PUBLIC_PAYMENTS_FALLBACK === '1'
@@ -301,6 +303,8 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
 
   const requestDowngrade = React.useCallback(async (target: 'plus' | 'pro' | 'free') => {
     try {
+      if (target === 'plus') setDwPlusLabel('…')
+      if (target === 'pro') setDwProLabel('…')
       const token = await getAccessToken()
       const res = await fetch(`${paymentsBase}/api/polar/downgrade`, {
         method: 'POST',
@@ -313,8 +317,17 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
       if (!res.ok) throw new Error(await res.text())
       // Optionally show a toast; refresh plan later via webhook
       try { await fetchPlan() } catch {}
+      if (target === 'plus') setDwPlusLabel('queued')
+      if (target === 'pro') setDwProLabel('queued')
     } catch (e) {
       console.warn('Failed to request downgrade', e)
+      if (target === 'plus') setDwPlusLabel('failed')
+      if (target === 'pro') setDwProLabel('failed')
+    } finally {
+      setTimeout(() => {
+        if (target === 'plus') setDwPlusLabel('downgrade')
+        if (target === 'pro') setDwProLabel('downgrade')
+      }, 1500)
     }
   }, [paymentsBase, getAccessToken, fetchPlan])
 
@@ -524,10 +537,14 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
                         >{canBuyPlus ? 'Upgrade' : 'Configure'}</button>
                       )}
                       {(activePlan === 'pro' || activePlan === 'team') && (
-                        <button
-                          onClick={() => requestDowngrade('plus')}
-                          className='mt-2 w-full px-4 py-2 text-[12px] font-medium rounded-md border border-white/20 bg-white/5 hover:bg-white/10 text-foreground/90'
-                        >Downgrade to Plus (next cycle)</button>
+                        <div className='mt-2'>
+                          <button
+                            onClick={() => requestDowngrade('plus')}
+                            className='text-[11px] text-[#9AA0A6]'
+                            style={{ background: 'transparent', border: 0, padding: 0, cursor: 'pointer' }}
+                            aria-label='Downgrade to Plus next cycle'
+                          >{dwPlusLabel}</button>
+                        </div>
                       )}
                     </div>
 
@@ -570,10 +587,14 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
                         >{canBuyPro ? 'Upgrade' : 'Configure'}</button>
                       )}
                       {activePlan === 'team' && (
-                        <button
-                          onClick={() => requestDowngrade('pro')}
-                          className='mt-2 w-full px-4 py-2 text-[12px] font-medium rounded-md border border-white/20 bg-white/5 hover:bg-white/10 text-foreground/90'
-                        >Downgrade to Pro (next cycle)</button>
+                        <div className='mt-2'>
+                          <button
+                            onClick={() => requestDowngrade('pro')}
+                            className='text-[11px] text-[#9AA0A6]'
+                            style={{ background: 'transparent', border: 0, padding: 0, cursor: 'pointer' }}
+                            aria-label='Downgrade to Pro next cycle'
+                          >{dwProLabel}</button>
+                        </div>
                       )}
                     </div>
 
