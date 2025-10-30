@@ -73,17 +73,29 @@ def _get_jwks() -> Dict[str, Any]:
             raise HTTPException(status_code=500, detail="Server misconfigured: SUPABASE_JWKS_URL not set")
         resp = requests.get(SUPABASE_JWKS_URL, timeout=5)
         if not resp.ok:
+            try:
+                logger.warning("_get_jwks: fetch failed status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", ""))
+            except Exception:
+                ...
             raise HTTPException(status_code=500, detail=f"Failed to fetch JWKS: {resp.text}")
         _jwks_cache = resp.json()
     return _jwks_cache
 
 def verify_supabase_jwt(authorization_header: Optional[str]) -> str:
     if not authorization_header or not authorization_header.lower().startswith("bearer "):
+        try:
+            logger.exception("verify_supabase_jwt: missing/invalid Authorization header")
+        except Exception:
+            ...
         raise HTTPException(status_code=401, detail="Missing Authorization header")
     token = authorization_header.split(" ", 1)[1].strip()
     try:
         headers = jwt.get_unverified_header(token)
     except Exception:
+        try:
+            logger.exception("verify_supabase_jwt: invalid token header")
+        except Exception:
+            ...
         raise HTTPException(status_code=401, detail="Invalid token header")
 
     alg = (headers.get("alg") or "").upper()
@@ -99,6 +111,10 @@ def verify_supabase_jwt(authorization_header: Optional[str]) -> str:
         except HTTPException:
             raise
         except Exception as e:
+            try:
+                logger.exception("verify_supabase_jwt: HS decode error")
+            except Exception:
+                ...
             raise HTTPException(status_code=401, detail=f"Token verification failed (HS): {str(e)}")
 
     jwks = _get_jwks()
@@ -121,6 +137,10 @@ def verify_supabase_jwt(authorization_header: Optional[str]) -> str:
     except HTTPException:
         raise
     except Exception as e:
+        try:
+            logger.exception("verify_supabase_jwt: RS decode error")
+        except Exception:
+            ...
         raise HTTPException(status_code=401, detail=f"Token verification failed (RS): {str(e)}")
 
 
@@ -132,6 +152,10 @@ def grant_credits(user_id: str, units: int, request_id: str, meta: Dict[str, Any
     payload = {"p_user_id": user_id, "p_units": units, "p_request_id": request_id, "p_meta": meta or {}}
     resp = requests.post(url, headers=_supabase_auth_headers(), json=payload, timeout=10)
     if not resp.ok:
+        try:
+            logger.warning("grant_credits: rpc error status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", ""))
+        except Exception:
+            ...
         raise HTTPException(status_code=500, detail=f"Supabase grant error: {resp.text}")
     try:
         return int(resp.json())
@@ -165,8 +189,19 @@ def update_subscription(user_id: str, provider: str, status: Optional[str], curr
 
 def update_profile_plan(user_id: str, plan: str) -> None:
     try:
+        try:
+            logger.info("update_profile_plan: start user_id=%s plan=%s", user_id, plan)
+        except Exception:
+            ...
         # Try profiles.user_id first
         resp = _supabase_rest_patch(f"/rest/v1/profiles?user_id=eq.{user_id}", {"plan": plan})
+        try:
+            logger.info(
+                "update_profile_plan: patch by user_id resp_ok=%s status=%s",
+                getattr(resp, "ok", None), getattr(resp, "status_code", None)
+            )
+        except Exception:
+            ...
         if resp is not None and not getattr(resp, "ok", False):
             try:
                 logger.warning("update_profile_plan: user_id filter patch failed status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", ""))
@@ -178,25 +213,54 @@ def update_profile_plan(user_id: str, plan: str) -> None:
                 body = resp.json()
                 if isinstance(body, list) and len(body) > 0:
                     applied = True
+                try:
+                    logger.info("update_profile_plan: patch by user_id returned %s row(s)", len(body) if isinstance(body, list) else None)
+                except Exception:
+                    ...
             except Exception:
                 # If representation not returned, assume applied
                 applied = True
+        try:
+            logger.info("update_profile_plan: applied_by_user_id=%s", applied)
+        except Exception:
+            ...
         if not applied:
             # Fallback to profiles.id (many Supabase setups use id as auth uid)
             resp2 = _supabase_rest_patch(f"/rest/v1/profiles?id=eq.{user_id}", {"plan": plan})
+            try:
+                logger.info(
+                    "update_profile_plan: patch by id resp_ok=%s status=%s",
+                    getattr(resp2, "ok", None), getattr(resp2, "status_code", None)
+                )
+            except Exception:
+                ...
             if resp2 is not None and not getattr(resp2, "ok", False):
                 try:
                     logger.warning("update_profile_plan: id filter patch failed status=%s body=%s", getattr(resp2, "status_code", None), getattr(resp2, "text", ""))
                 except Exception:
                     ...
     except Exception:
-        pass
+        try:
+            logger.exception("update_profile_plan: unexpected error")
+        except Exception:
+            ...
 
 def update_profile_plan_by_email(email: str, plan: str) -> None:
     if not email:
         return
     try:
+        try:
+            logger.info("update_profile_plan_by_email: start email=%s plan=%s", email, plan)
+        except Exception:
+            ...
         resp = _supabase_rest_patch(f"/rest/v1/profiles?email=eq.{email}", {"plan": plan})
+        try:
+            logger.info(
+                "update_profile_plan_by_email: patch by email resp_ok=%s status=%s",
+                getattr(resp, "ok", None), getattr(resp, "status_code", None)
+            )
+        except Exception:
+            ...
         if resp is not None and not getattr(resp, "ok", False):
             try:
                 logger.warning("update_profile_plan_by_email: email filter patch failed status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", ""))
@@ -208,27 +272,59 @@ def update_profile_plan_by_email(email: str, plan: str) -> None:
                 body = resp.json()
                 if isinstance(body, list) and len(body) > 0:
                     applied = True
+                try:
+                    logger.info("update_profile_plan_by_email: patch by email returned %s row(s)", len(body) if isinstance(body, list) else None)
+                except Exception:
+                    ...
             except Exception:
                 applied = True
+        try:
+            logger.info("update_profile_plan_by_email: applied_by_email=%s", applied)
+        except Exception:
+            ...
         if not applied:
             # Fallback: resolve user_id by email and try user_id update; if still not applied, upsert
             try:
                 uid = find_user_by_email(email)
             except Exception:
                 uid = None
+            try:
+                logger.info("update_profile_plan_by_email: resolved uid=%s from email", uid)
+            except Exception:
+                ...
             if uid:
                 # Try user_id-based patch
                 update_profile_plan(uid, plan)
                 # Attempt to upsert profile row if it still does not exist
                 try:
-                    _supabase_rest_post(
+                    resp_upsert = _supabase_rest_post(
                         "/rest/v1/profiles?on_conflict=user_id",
                         {"user_id": uid, "email": email, "plan": plan},
                     )
+                    try:
+                        logger.info(
+                            "update_profile_plan_by_email: upsert resp_ok=%s status=%s",
+                            getattr(resp_upsert, "ok", None), getattr(resp_upsert, "status_code", None)
+                        )
+                    except Exception:
+                        ...
                 except Exception:
                     ...
+        # Post-check: read back plan snapshot for this email
+        try:
+            snap = _supabase_rest_get("/rest/v1/profiles", params={"email": f"eq.{email}", "select": "user_id,email,plan"})
+            if getattr(snap, "ok", False):
+                try:
+                    logger.info("update_profile_plan_by_email: post_check rows=%s body=%s", "?", snap.text[:256])
+                except Exception:
+                    ...
+        except Exception:
+            ...
     except Exception:
-        pass
+        try:
+            logger.exception("update_profile_plan_by_email: unexpected error")
+        except Exception:
+            ...
 
 def find_user_by_email(email: Optional[str]) -> Optional[str]:
     if not email:
@@ -243,7 +339,10 @@ def find_user_by_email(email: Optional[str]) -> Optional[str]:
                 if uid:
                     return str(uid)
     except Exception:
-        pass
+        try:
+            logger.exception("find_user_by_email: profiles lookup error")
+        except Exception:
+            ...
     # 2) Fallback: Supabase Auth admin – find user by email
     try:
         if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
@@ -261,6 +360,10 @@ def find_user_by_email(email: Optional[str]) -> Optional[str]:
                     if uid:
                         return str(uid)
     except Exception:
+        try:
+            logger.exception("find_user_by_email: admin lookup error")
+        except Exception:
+            ...
         return None
     return None
 

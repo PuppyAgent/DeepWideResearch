@@ -32,21 +32,41 @@ def build_polar_router(
     async def polar_webhook(req: Request):
         """Handle Polar webhook events (sandbox/production)."""
         raw = await req.body()
+        if logger:
+            try:
+                logger.info("[dwr_polar_webhook] incoming bytes=%s", len(raw or b""))
+            except Exception:
+                ...
         try:
             verify_polar_signature(req, raw)
         except HTTPException:
             raise
         except Exception:
+            if logger:
+                try:
+                    logger.exception("[dwr_polar_webhook] signature verification error")
+                except Exception:
+                    ...
             raise HTTPException(status_code=403, detail="Webhook verification failed")
 
         try:
             payload = json.loads(raw or b"{}")
         except Exception:
+            if logger:
+                try:
+                    logger.exception("[dwr_polar_webhook] invalid JSON payload")
+                except Exception:
+                    ...
             raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
         evt_type = str(payload.get("type") or "").lower()
         data = payload.get("data") or {}
         event_id = str(payload.get("id") or data.get("id") or int(time.time() * 1000))
+        if logger:
+            try:
+                logger.info("[dwr_polar_webhook] evt=%s id=%s", evt_type, event_id)
+            except Exception:
+                ...
 
         # Identify user: prefer metadata.user_id, else email lookup; always extract email for plan updates
         meta = data.get("metadata") or {}
@@ -61,6 +81,11 @@ def build_polar_router(
 
         if not user_id:
             user_id = find_user_by_email(email)
+        if logger:
+            try:
+                logger.info("[dwr_polar_webhook] identified email=%s user_id=%s", email, user_id)
+            except Exception:
+                ...
 
         if not user_id:
             logger.warning("[polar_webhook] User not found for event %s", event_id)
@@ -76,6 +101,11 @@ def build_polar_router(
             price_id = data.get("price_id") or (data.get("price") or {}).get("id")
             plan_hint = (data.get("metadata") or {}).get("plan")
             units = determine_units_for_purchase(product_id=product_id, price_id=price_id, plan_hint=plan_hint)
+            if logger:
+                try:
+                    logger.info("[dwr_polar_webhook] determined units=%s (plan_hint=%s)", units, plan_hint)
+                except Exception:
+                    ...
             # Use a canonical transaction identifier across related events to ensure idempotency
             canonical_txn_id = (
                 data.get("invoice_id")
@@ -114,6 +144,11 @@ def build_polar_router(
             paid_like_statuses = {"active", "paid", "succeeded", "success", "completed"}
             if str(status).lower() in paid_like_statuses:
                 plan_for_profile = "pro" if units >= pro_default else ("plus" if units >= plus_default else "free")
+                if logger:
+                    try:
+                        logger.info("[dwr_polar_webhook] updating plan email=%s plan=%s status=%s", email, plan_for_profile, status)
+                    except Exception:
+                        ...
                 if email:
                     update_profile_plan_by_email(email, plan_for_profile)
                 else:
@@ -186,7 +221,10 @@ def build_polar_router(
         try:
             user_id = verify_supabase_jwt(req.headers.get("Authorization"))
         except Exception as e:
-            logger.error(f"JWT verification failed on checkout success: {e}")
+            try:
+                logger.exception("JWT verification failed on checkout success")
+            except Exception:
+                ...
             raise
 
         units = determine_units_for_purchase(
@@ -210,6 +248,11 @@ def build_polar_router(
         )
 
         plan_for_profile = "pro" if units >= pro_default else ("plus" if units >= plus_default else "free")
+        if logger:
+            try:
+                logger.info("[dwr_polar_checkout_success] updating plan user_id=%s plan=%s", user_id, plan_for_profile)
+            except Exception:
+                ...
         update_profile_plan(user_id, plan_for_profile)
 
         return {"ok": True, "user_id": user_id, "granted": units, "balance": new_balance}
