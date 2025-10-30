@@ -1,4 +1,5 @@
 from typing import Optional, Callable, Dict, Any
+import os
 import json
 import time
 import logging
@@ -26,6 +27,7 @@ def build_polar_router(
     logger: logging.Logger,
 ):
     router = APIRouter()
+    DEBUG = os.getenv("POLAR_WEBHOOK_DEBUG", "0") not in ("0", "false", "False")
 
     @router.post("/api/polar/webhook")
     async def polar_webhook(req: Request):
@@ -82,11 +84,12 @@ def build_polar_router(
                 except Exception:
                     pass
 
-        if logger and logger.level <= logging.DEBUG:
+
+        if DEBUG and logger:
             try:
-                logger.debug("[polar_webhook] meta keys: %s", list(meta.keys()))
+                logger.warning("[polar_webhook] meta keys: %s", list(meta.keys()))
             except Exception:
-                pass
+                ...
 
         if not user_id:
             email = (
@@ -97,6 +100,11 @@ def build_polar_router(
                 or meta.get("email")
             )
             user_id = find_user_by_email(email)
+            if DEBUG and logger:
+                try:
+                    logger.warning("[polar_webhook] lookup via email=%s -> %s", email, user_id)
+                except Exception:
+                    ...
 
         if not user_id:
             logger.warning("[polar_webhook] User not found for event %s", event_id)

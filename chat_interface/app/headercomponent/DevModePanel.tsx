@@ -111,7 +111,9 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
       url += `&customerEmail=${encodeURIComponent(email)}`
     }
     const userId = session?.user?.id
-    if (userId) {      // Send multiple encodings to maximize compatibility
+
+    if (userId) {
+      // Send multiple encodings to maximize compatibility
       url += `&metadata.user_id=${encodeURIComponent(userId)}`
       url += `&metadata[user_id]=${encodeURIComponent(userId)}`
       url += `&metadata[supabase_user_id]=${encodeURIComponent(userId)}`
