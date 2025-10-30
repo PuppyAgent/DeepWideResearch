@@ -19,7 +19,8 @@ def build_polar_router(
     determine_units_for_purchase: Callable[[Optional[str], Optional[str], Optional[str]], int],
     grant_credits: Callable[[str, int, str, Dict[str, Any]], int],
     update_subscription: Callable[[str, str, Optional[str], Optional[str], Dict[str, Any]], None],
-    update_profile_plan: Callable[[str, str], None],
+    update_profile_plan: Callable[[str, str], None],  # by user_id
+    update_profile_plan_by_email: Callable[[str, str], None],
     find_user_by_email: Callable[[Optional[str]], Optional[str]],
     verify_supabase_jwt: Callable[[Optional[str]], str],
     pro_default: int,
@@ -156,10 +157,13 @@ def build_polar_router(
                 current_period_end=period_end,
                 metadata={"event_id": event_id, "event_type": evt_type},
             )
-            if str(status).lower() in ("active", "paid"):
+            paid_like_statuses = {"active", "paid", "succeeded", "success", "completed"}
+            if str(status).lower() in paid_like_statuses:
                 plan_for_profile = "pro" if units >= pro_default else ("plus" if units >= plus_default else "free")
                 if email:
-                    update_profile_plan(email, plan_for_profile)
+                    update_profile_plan_by_email(email, plan_for_profile)
+                else:
+                    update_profile_plan(user_id, plan_for_profile)
 
             return {"ok": True, "user_id": user_id, "granted": units, "balance": new_balance}
 

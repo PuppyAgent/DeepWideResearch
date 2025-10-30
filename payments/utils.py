@@ -211,13 +211,22 @@ def update_profile_plan_by_email(email: str, plan: str) -> None:
             except Exception:
                 applied = True
         if not applied:
-            # Fallback: resolve user_id by email and reuse user_id-based updater
+            # Fallback: resolve user_id by email and try user_id update; if still not applied, upsert
             try:
                 uid = find_user_by_email(email)
             except Exception:
                 uid = None
             if uid:
+                # Try user_id-based patch
                 update_profile_plan(uid, plan)
+                # Attempt to upsert profile row if it still does not exist
+                try:
+                    _supabase_rest_post(
+                        "/rest/v1/profiles?on_conflict=user_id",
+                        {"user_id": uid, "email": email, "plan": plan},
+                    )
+                except Exception:
+                    ...
     except Exception:
         pass
 
