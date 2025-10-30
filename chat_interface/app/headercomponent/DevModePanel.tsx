@@ -39,6 +39,7 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
   const hasLoadedRef = React.useRef(false)
   const [activeTab, setActiveTab] = React.useState<'credits' | 'api-keys'>('credits')
   const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+  const paymentsBase = process.env.NEXT_PUBLIC_PAYMENTS_API_URL || apiBase
   const polarProductId = process.env.NEXT_PUBLIC_POLAR_PRODUCT_ID
   const productId15 = process.env.NEXT_PUBLIC_POLAR_PRODUCT_ID_15
   const productId100 = process.env.NEXT_PUBLIC_POLAR_PRODUCT_ID_100
@@ -178,11 +179,11 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
         localStorage.setItem('dwr_active_plan', pending)
         localStorage.removeItem('dwr_pending_plan')
         setActivePlan(pending)
-        // notify backend to grant credits immediately (webhook is still the primary path)
+        // notify payments service to grant credits immediately (webhook is still the primary path)
         ;(async () => {
           try {
             const token = await getAccessToken()
-            await fetch(`${apiBase}/api/polar/checkout/success`, {
+            await fetch(`${paymentsBase}/api/polar/checkout/success`, {
               method: 'POST',
               headers: {
                 'Authorization': token ? `Bearer ${token}` : '',

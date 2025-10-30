@@ -765,143 +765,10 @@ async def get_balance(req: Request):
     return {"user_id": user_id, "balance": balance}
 
 
-# ===================== Polar Webhook =====================
-@app.post("/api/polar/webhook")
-async def polar_webhook(req: Request):
-    """Handle Polar webhook events (sandbox/production).
-
-    Grants monthly credits on successful payment/activation and optionally updates subscription + plan.
-    """
-    # Read raw body first for signature verification
-    raw = await req.body()
-    try:
-        _verify_polar_signature(req, raw)
-    except HTTPException:
-        raise
-    except Exception:
-        # Be conservative: reject if verification throws unexpected error
-        raise HTTPException(status_code=403, detail="Webhook verification failed")
-
-    try:
-        payload = json.loads(raw or b"{}")
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
-
-    evt_type = str(payload.get("type") or "").lower()
-    data = payload.get("data") or {}
-    event_id = str(payload.get("id") or data.get("id") or int(time.time()*1000))
-
-    # Identify user: prefer metadata.user_id, else email lookup
-    meta = data.get("metadata") or {}
-    user_id = meta.get("user_id") or meta.get("supabase_user_id")
-
-    if not user_id:
-        email = (
-            data.get("customer", {}).get("email")
-            or data.get("buyer", {}).get("email")
-            or data.get("email")
-            or payload.get("customerEmail")
-        )
-        user_id = _find_user_by_email(email)
-
-    if not user_id:
-        # Can't resolve user; nothing to grant
-        logger.warning("[polar_webhook] User not found for event %s", event_id)
-        return {"ok": True, "skipped": True}
-
-    # Determine if event should grant credits
-    grantworthy = any(k in evt_type for k in ["paid", "payment", "invoice", "subscription.active", "subscription_created", "subscription_updated"])
-
-    if grantworthy:
-        # Try to resolve product/price and plan
-        product_id = (
-            data.get("product_id")
-            or (data.get("product") or {}).get("id")
-            or (data.get("price") or {}).get("product_id")
-        )
-        price_id = data.get("price_id") or (data.get("price") or {}).get("id")
-        plan_hint = (data.get("metadata") or {}).get("plan")
-        units = _determine_units_for_purchase(product_id=product_id, price_id=price_id, plan_hint=plan_hint)
-        rid = f"polar_{event_id}"
-        new_balance = _grant_credits(
-            user_id=user_id,
-            units=units,
-            request_id=rid,
-            meta={
-                "provider": "polar",
-                "event_type": evt_type,
-                "raw": {"id": event_id, "product_id": product_id, "price_id": price_id},
-            },
-        )
-
-        # Optional: update subscription + plan
-        status = (data.get("status") or data.get("state") or "active")
-        period_end = data.get("current_period_end") or data.get("period_end") or data.get("current_period_end_at")
-        _update_subscription(
-            user_id=user_id,
-            provider="polar",
-            status=str(status).lower(),
-            current_period_end=period_end,
-            metadata={"event_id": event_id, "event_type": evt_type},
-        )
-        # Promote plan based on resolved units if active/paid
-        if str(status).lower() in ("active", "paid"):
-            plan_for_profile = "pro" if units >= POLAR_PRO_CREDITS_DEFAULT else ("plus" if units >= POLAR_PLUS_CREDITS_DEFAULT else "free")
-            _update_profile_plan(user_id, plan_for_profile)
-
-        return {"ok": True, "user_id": user_id, "granted": units, "balance": new_balance}
-
-    # Non-grant events acknowledged
-    return {"ok": True}
+## Polar routes are now provided via an included router
 
 
 # ===================== API Key Management Endpoints =====================
-class CheckoutSuccessRequest(BaseModel):
-    """Client-confirmed checkout success.
-    Used as a fallback to grant credits immediately upon redirect success.
-    """
-    plan: Optional[str] = None  # 'plus' | 'pro'
-    product_id: Optional[str] = None
-    price_id: Optional[str] = None
-
-
-@app.post("/api/polar/checkout/success")
-async def polar_checkout_success(body: CheckoutSuccessRequest, req: Request):
-    """Grant credits immediately after client returns from successful checkout.
-
-    This is complementary to the webhook; safe to call once per success.
-    """
-    try:
-        user_id = _verify_supabase_jwt(req.headers.get("Authorization"))
-    except Exception as e:
-        logger.error(f"JWT verification failed on checkout success: {e}")
-        raise
-
-    units = _determine_units_for_purchase(
-        product_id=(body.product_id or None),
-        price_id=(body.price_id or None),
-        plan_hint=(body.plan or None),
-    )
-
-    rid = f"polar_checkout_success_{user_id}_{int(time.time())}"
-    new_balance = _grant_credits(
-        user_id=user_id,
-        units=units,
-        request_id=rid,
-        meta={
-            "provider": "polar",
-            "source": "checkout_success_endpoint",
-            "product_id": body.product_id,
-            "price_id": body.price_id,
-            "plan": (body.plan or None),
-        },
-    )
-
-    # Update plan optimistically based on units
-    plan_for_profile = "pro" if units >= POLAR_PRO_CREDITS_DEFAULT else ("plus" if units >= POLAR_PLUS_CREDITS_DEFAULT else "free")
-    _update_profile_plan(user_id, plan_for_profile)
-
-    return {"ok": True, "user_id": user_id, "granted": units, "balance": new_balance}
 class CreateApiKeyRequest(BaseModel):
     name: Optional[str] = None
     expires_in_days: Optional[int] = None
@@ -1185,6 +1052,8 @@ async def test_mcp_services(request: MCPTestRequest):
     
     return MCPTestResponse(services=results)
 
+
+## Polar routes moved to standalone payments service
 
 if __name__ == "__main__":
     import uvicorn
