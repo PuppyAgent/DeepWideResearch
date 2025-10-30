@@ -218,7 +218,9 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
           })()
         } else {
           // No fallback call; still refresh balance
-          try { await fetchBalance() } catch {}
+          ;(async () => {
+            try { await fetchBalance() } catch {}
+          })()
         }
       }
     } catch {}
