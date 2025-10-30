@@ -169,12 +169,32 @@ def find_user_by_email(email: Optional[str]) -> Optional[str]:
     if not email:
         return None
     try:
+        # 1) Try profiles table (if it stores email)
         resp = _supabase_rest_get("/rest/v1/profiles", params={"email": f"eq.{email}", "select": "user_id"})
         if resp.ok:
             arr = resp.json()
             if isinstance(arr, list) and arr:
                 uid = arr[0].get("user_id")
-                return str(uid) if uid else None
+                if uid:
+                    return str(uid)
+    except Exception:
+        pass
+    # 2) Fallback: Supabase Auth admin – find user by email
+    try:
+        if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
+            url = f"{SUPABASE_URL.rstrip('/')}/auth/v1/admin/users"
+            headers = {
+                "apikey": SUPABASE_SERVICE_ROLE_KEY,
+                "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
+            }
+            resp2 = requests.get(url, headers=headers, params={"email": email}, timeout=5)
+            if resp2.ok:
+                data = resp2.json()
+                users = data.get("users") if isinstance(data, dict) else (data if isinstance(data, list) else [])
+                if isinstance(users, list) and users:
+                    uid = users[0].get("id")
+                    if uid:
+                        return str(uid)
     except Exception:
         return None
     return None

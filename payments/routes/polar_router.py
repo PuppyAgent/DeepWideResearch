@@ -84,7 +84,6 @@ def build_polar_router(
                 except Exception:
                     pass
 
-
         if DEBUG and logger:
             try:
                 logger.warning("[polar_webhook] meta keys: %s", list(meta.keys()))
