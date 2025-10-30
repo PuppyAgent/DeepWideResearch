@@ -138,6 +138,10 @@ def grant_credits(user_id: str, units: int, request_id: str, meta: Dict[str, Any
     except Exception:
         return 0
 
+def revoke_credits(user_id: str, units: int, request_id: str, meta: Dict[str, Any]) -> int:
+    neg_units = -abs(int(units or 0))
+    return grant_credits(user_id=user_id, units=neg_units, request_id=request_id, meta=meta)
+
 def update_subscription(user_id: str, provider: str, status: Optional[str], current_period_end: Optional[str], metadata: Dict[str, Any]) -> None:
     try:
         resp = _supabase_rest_get(
