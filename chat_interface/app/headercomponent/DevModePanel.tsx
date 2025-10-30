@@ -111,12 +111,16 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
       url += `&customerEmail=${encodeURIComponent(email)}`
     }
     const userId = session?.user?.id
-
     if (userId) {
       // Send multiple encodings to maximize compatibility
       url += `&metadata.user_id=${encodeURIComponent(userId)}`
       url += `&metadata[user_id]=${encodeURIComponent(userId)}`
       url += `&metadata[supabase_user_id]=${encodeURIComponent(userId)}`
+      try {
+        const metaObj: Record<string, string> = { user_id: userId }
+        if (planKey) metaObj.plan = planKey
+        url += `&metadata=${encodeURIComponent(JSON.stringify(metaObj))}`
+      } catch {}
     }
     if (planKey) {
       url += `&metadata.plan=${encodeURIComponent(planKey)}`
