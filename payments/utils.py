@@ -267,11 +267,18 @@ def verify_polar_signature(req: Request, raw_body: bytes) -> None:
         "X-POLAR-SIGNATURE",
     ]
     sig = None
+    used_header_name = None
     for name in possible_header_names:
         sig = req.headers.get(name)
         if sig:
+            used_header_name = name
             break
     if not sig:
+        if POLAR_WEBHOOK_DEBUG:
+            try:
+                logger.warning("[polar_signature] header not found. Incoming headers: %s", dict(req.headers))
+            except Exception:
+                pass
         raise HTTPException(status_code=403, detail="Missing Polar signature header")
 
     # Normalize candidate signature
@@ -310,12 +317,15 @@ def verify_polar_signature(req: Request, raw_body: bytes) -> None:
 
     if POLAR_WEBHOOK_DEBUG and not valid:
         logger.warning(
-            "[polar_signature] mismatch: header=%s hex=%s b64=%s b64url=%s",
-            header_sig_raw[:64], digest_hex[:64], digest_b64_std[:64], digest_b64_url[:64]
+            "[polar_signature] mismatch: headerName=%s headerVal=%s hex=%s b64=%s b64url=%s",
+            used_header_name,
+            header_sig_raw[:128],
+            digest_hex[:64],
+            digest_b64_std[:64],
+            digest_b64_url[:64]
         )
 
     if not valid:
-
         raise HTTPException(status_code=403, detail="Invalid webhook signature")
 
 
