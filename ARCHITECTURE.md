@@ -117,7 +117,8 @@ create table if not exists public.credit_ledger (
   id bigserial primary key,
   user_id uuid not null references auth.users (id) on delete cascade,
   delta integer not null, -- 正数发放，负数扣减（单位：credits）
-  request_id text not null unique,
+  request_id text not null,
+  constraint credit_ledger_request_id_unique unique (user_id, request_id),
   meta jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
