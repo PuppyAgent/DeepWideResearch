@@ -110,6 +110,17 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
     if (email) {
       url += `&customerEmail=${encodeURIComponent(email)}`
     }
+    const userId = session?.user?.id
+    if (userId) {
+      url += `&metadata.user_id=${encodeURIComponent(userId)}`
+    }
+    if (planKey) {
+      url += `&metadata.plan=${encodeURIComponent(planKey)}`
+    }
+    try {
+      const successUrl = `${window.location.origin}/?success=1`
+      url += `&success_url=${encodeURIComponent(successUrl)}`
+    } catch {}
     // Mark as pending only; activation happens after checkout success callback
     if (planKey) {
       try {
