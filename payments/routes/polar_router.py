@@ -47,16 +47,54 @@ def build_polar_router(
         data = payload.get("data") or {}
         event_id = str(payload.get("id") or data.get("id") or int(time.time() * 1000))
 
-        # Identify user: prefer metadata.user_id, else email lookup
-        meta = data.get("metadata") or {}
-        user_id = meta.get("user_id") or meta.get("supabase_user_id")
+        # Identify user: prefer metadata user_id (robust variants), else email lookup
+        meta_raw = data.get("metadata") or {}
+        meta: Dict[str, Any]
+        if isinstance(meta_raw, str):
+            try:
+                meta = json.loads(meta_raw)
+            except Exception:
+                meta = {"_raw": meta_raw}
+        elif isinstance(meta_raw, dict):
+            meta = meta_raw
+        else:
+            meta = {}
+
+        # Try multiple key variants to be resilient to provider param encoding
+        user_id: Optional[str] = None
+        for key in [
+            "user_id",
+            "userid",
+            "userId",
+            "supabase_user_id",
+            "supabaseUserId",
+            "supabase-user-id",
+            "metadata.user_id",
+            "metadata[supabase_user_id]",
+            "metadata[user_id]",
+            "metadata[userid]",
+        ]:
+            v = meta.get(key)
+            if v:
+                try:
+                    user_id = str(v)
+                    break
+                except Exception:
+                    pass
+
+        if logger and logger.level <= logging.DEBUG:
+            try:
+                logger.debug("[polar_webhook] meta keys: %s", list(meta.keys()))
+            except Exception:
+                pass
 
         if not user_id:
             email = (
-                data.get("customer", {}).get("email")
-                or data.get("buyer", {}).get("email")
+                (data.get("customer") or {}).get("email")
+                or (data.get("buyer") or {}).get("email")
                 or data.get("email")
                 or payload.get("customerEmail")
+                or meta.get("email")
             )
             user_id = find_user_by_email(email)
 
