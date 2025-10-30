@@ -252,15 +252,34 @@ POLAR_WEBHOOK_SECRET = os.getenv("POLAR_WEBHOOK_SECRET")
 def verify_polar_signature(req: Request, raw_body: bytes) -> None:
     if not POLAR_WEBHOOK_SECRET:
         return
-    sig = (
-        req.headers.get("Polar-Webhook-Signature")
-        or req.headers.get("polar-webhook-signature")
-        or req.headers.get("POLAR-WEBHOOK-SIGNATURE")
-    )
+    # Accept multiple possible header names used by providers / proxies
+    possible_header_names = [
+        "Polar-Webhook-Signature",
+        "polar-webhook-signature",
+        "POLAR-WEBHOOK-SIGNATURE",
+        "Polar-Signature",
+        "polar-signature",
+        "POLAR-SIGNATURE",
+        "X-Polar-Signature",
+        "x-polar-signature",
+        "X-POLAR-SIGNATURE",
+    ]
+    sig = None
+    for name in possible_header_names:
+        sig = req.headers.get(name)
+        if sig:
+            break
     if not sig:
-        raise HTTPException(status_code=403, detail="Missing Polar-Webhook-Signature")
+        raise HTTPException(status_code=403, detail="Missing Polar signature header")
+
+    header_sig = sig.strip().strip('"\'').lower()
+    # Some send formats like "sha256=abcdef..." — support that as well
+    if "=" in header_sig:
+        parts = header_sig.split("=", 1)
+        if len(parts) == 2 and parts[1]:
+            header_sig = parts[1]
+
     digest = hmac.new(POLAR_WEBHOOK_SECRET.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
-    header_sig = sig.strip().lower()
     if not hmac.compare_digest(header_sig, digest):
         raise HTTPException(status_code=403, detail="Invalid webhook signature")
 
