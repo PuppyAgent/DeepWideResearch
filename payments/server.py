@@ -140,8 +140,28 @@ app.include_router(
 
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("PAYMENTS_PORT", "8100"))
+    import socket
+    port_env = os.getenv("PAYMENTS_PORT")
+    port = int(port_env) if port_env else 8100
     host = os.getenv("HOST", "0.0.0.0")
+    allow_fallback = os.getenv("ALLOW_PORT_FALLBACK", "1") not in ("0", "false", "False")
+
+    def _is_port_free(p: int) -> bool:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind((host, p))
+                return True
+        except OSError:
+            return False
+
+    if not _is_port_free(port) and allow_fallback and not port_env:
+        base = port
+        for candidate in range(base + 1, base + 11):
+            if _is_port_free(candidate):
+                port = candidate
+                break
+
     uvicorn.run(app, host=host, port=port, log_level="info")
 
 
