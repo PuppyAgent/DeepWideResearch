@@ -63,7 +63,7 @@ class Configuration:
         self.research_model = os.getenv("RESEARCH_MODEL", "openai:gpt-4.1")
         self.research_model_max_tokens = int(os.getenv("RESEARCH_MODEL_MAX_TOKENS", "10000"))
         self.final_report_model = os.getenv("FINAL_REPORT_MODEL", "openai:gpt-4.1")
-        self.final_report_model_max_tokens = int(os.getenv("FINAL_REPORT_MODEL_MAX_TOKENS", "10000"))
+        self.final_report_model_max_tokens = int(os.getenv("FINAL_REPORT_MODEL_MAX_TOKENS", "128000"))
         self.mcp_prompt = None
 
 
@@ -261,7 +261,7 @@ if __name__ == "__main__":
             self.research_model = "openai/o4-mini"
             self.research_model_max_tokens = 16000
             self.final_report_model = "openai/o4-mini"
-            self.final_report_model_max_tokens = 16000
+            self.final_report_model_max_tokens = 128000
             self.max_react_tool_calls = 5
     
     async def test():
