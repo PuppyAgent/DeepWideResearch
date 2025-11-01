@@ -627,16 +627,51 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
             {activeTab === 'api-keys' && (
       <div style={{ marginBottom: '16px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button
+              onClick={() => { fetchKeys().catch(() => {}) }}
+              disabled={loading}
+              title="Refresh API keys usage"
+              aria-label="Refresh API keys usage"
+              style={{
+                height: 28,
+                padding: '0 10px',
+                borderRadius: 6,
+                border: '1px solid #2a2a2a',
+                background: loading ? '#1a1a1a' : '#171717',
+                color: '#d6d6d6',
+                cursor: loading ? 'progress' : 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6
+              }}
+            >
+              <svg 
+                width='14' 
+                height='14' 
+                viewBox='0 0 24 24' 
+                fill='none' 
+                stroke='currentColor' 
+                strokeWidth='2' 
+                strokeLinecap='round' 
+                strokeLinejoin='round'
+                className={loading ? 'animate-spin' : ''}
+              >
+                <path d='M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2'/>
+              </svg>
+              <span style={{ fontSize: 12 }}>{loading ? 'Refreshing…' : 'Refresh'}</span>
+            </button>
+          </div>
           {loading && <div style={{ color: '#888', fontSize: '14px' }}>Loading...</div>}
           {!loading && keys.length === 0 && (
             <div style={{ color: '#888', fontSize: '14px' }}>No keys yet.</div>
           )}
           {!loading && keys.length > 0 && (
             <div style={{ border: '1px solid #2a2a2a', borderRadius: 10, overflow: 'hidden', background: '#121212' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 112px 80px', padding: '10px 12px', color: '#9aa0a6', fontSize: 14, background: 'transparent' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 64px 112px', padding: '10px 12px', color: '#9aa0a6', fontSize: 14, background: 'transparent' }}>
                 <div>Key</div>
+                <div style={{ textAlign: 'left' }}>Used</div>
                 <div style={{ textAlign: 'left' }}>Actions</div>
-                <div style={{ textAlign: 'right' }}>Used</div>
               </div>
               {keys.map(k => {
                 const expanded = expandedId === k.id
@@ -646,7 +681,7 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
                 return (
                   <React.Fragment key={k.id}>
                     <div
-                      style={{ display: 'grid', gridTemplateColumns: '1fr 112px 80px', alignItems: 'center', padding: '10px 12px', borderTop: '1px solid #2a2a2a', cursor: 'pointer', background: hoveredRowId === k.id ? 'rgba(255,255,255,0.03)' : 'transparent', transition: 'background-color 200ms ease' }}
+                      style={{ display: 'grid', gridTemplateColumns: '1fr 64px 112px', alignItems: 'center', padding: '10px 12px', borderTop: '1px solid #2a2a2a', cursor: 'pointer', background: hoveredRowId === k.id ? 'rgba(255,255,255,0.03)' : 'transparent', transition: 'background-color 200ms ease' }}
                       onMouseEnter={() => setHoveredRowId(k.id)}
                       onMouseLeave={() => setHoveredRowId(prev => (prev === k.id ? null : prev))}
                       onClick={() => setExpandedId(expanded ? null : k.id)}
@@ -670,6 +705,7 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
                           return stars
                         })()}
                       </code>
+                      <div style={{ color: '#4599DF', fontSize: '14px', textAlign: 'left' }}>{typeof k.used_credits === 'number' ? k.used_credits : 0}</div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: '8px' }} onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={() => setShowSecretByKey(prev => ({ ...prev, [k.id]: !prev[k.id] }))}
@@ -719,7 +755,6 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
                           </svg>
                         </button>
                       </div>
-                      <div style={{ color: '#c6c6c6', fontSize: '14px', textAlign: 'right' }}>{typeof k.used_credits === 'number' ? k.used_credits : 0}</div>
                     </div>
                     <div
                       style={{

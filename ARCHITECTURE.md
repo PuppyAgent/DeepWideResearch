@@ -124,6 +124,26 @@ create table if not exists public.credit_ledger (
 );
 create index if not exists idx_credit_ledger_user_time on public.credit_ledger (user_id, created_at desc);
 
+-- 优化：生成列与部分索引（用于 API Key 用量聚合）
+alter table public.credit_ledger
+  add column if not exists api_key_prefix text
+  generated always as ((meta->>'api_key_prefix')) stored;
+
+create index if not exists idx_ledger_user_prefix_neg
+  on public.credit_ledger (user_id, api_key_prefix)
+  where delta < 0;
+
+-- 用量聚合视图：每用户、每 API Key 前缀已消费的 credits（供 /api/keys used_credits 使用）
+create or replace view public.credit_usage_by_prefix as
+select
+  user_id,
+  api_key_prefix,
+  -sum(delta) as used
+from public.credit_ledger
+where delta < 0
+  and api_key_prefix is not null
+group by user_id, api_key_prefix;
+
 -- 3.1) API Keys（用户自助生成、可吊销）
 create table if not exists public.api_keys (
   id uuid primary key default gen_random_uuid(),
@@ -439,6 +459,26 @@ create table if not exists public.credit_ledger (
   constraint credit_ledger_request_id_unique unique (user_id, request_id)
 );
 create index if not exists idx_credit_ledger_user_time on public.credit_ledger (user_id, created_at desc);
+
+-- 优化：生成列与部分索引（用于 API Key 用量聚合）
+alter table public.credit_ledger
+  add column if not exists api_key_prefix text
+  generated always as ((meta->>'api_key_prefix')) stored;
+
+create index if not exists idx_ledger_user_prefix_neg
+  on public.credit_ledger (user_id, api_key_prefix)
+  where delta < 0;
+
+-- 用量聚合视图：每用户、每 API Key 前缀已消费的 credits（供 /api/keys used_credits 使用）
+create or replace view public.credit_usage_by_prefix as
+select
+  user_id,
+  api_key_prefix,
+  -sum(delta) as used
+from public.credit_ledger
+where delta < 0
+  and api_key_prefix is not null
+group by user_id, api_key_prefix;
 
 -- 余额视图（由账本聚合）
 create or replace view public.credit_balance as

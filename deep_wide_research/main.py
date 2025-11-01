@@ -863,24 +863,22 @@ async def list_api_keys(req: Request):
         # Aggregate usage by api_key prefix (sum of negative deltas per prefix)
         usage_by_prefix: Dict[str, int] = {}
         try:
+            # Read from DB view to avoid PostgREST group-by incompatibilities
             usage_resp = _supabase_rest_get(
-                "/rest/v1/credit_ledger",
+                "/rest/v1/credit_usage_by_prefix",
                 params={
                     "user_id": f"eq.{user_id}",
-                    "delta": "lt.0",
-                    "select": "prefix:meta->>api_key_prefix,total:sum(delta)",
-                    "group": "prefix",
+                    "select": "api_key_prefix,used",
                 },
             )
             if usage_resp.ok:
                 for row in usage_resp.json():
-                    prefix = row.get("prefix")
-                    total = row.get("total")
+                    prefix = row.get("api_key_prefix")
                     if not prefix:
                         continue
                     try:
-                        # total is negative sum, convert to positive used credits
-                        used = int(total) * -1 if total is not None else 0
+                        used_val = row.get("used")
+                        used = int(used_val) if used_val is not None else 0
                     except Exception:
                         used = 0
                     usage_by_prefix[prefix] = used
