@@ -91,7 +91,9 @@ export default function ChatInterface({
   const [isInitialLoad, setIsInitialLoad] = useState(true)
 
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
-    messagesEndRef.current?.scrollIntoView({ behavior })
+    const container = messagesContainerRef.current
+    if (!container) return
+    container.scrollTo({ top: container.scrollHeight, behavior })
   }
 
   // Scroll to bottom when messages change
@@ -252,7 +254,8 @@ export default function ChatInterface({
       flexDirection: 'column' as const,
       gap: '16px',
       borderTopLeftRadius: '16px',
-      borderTopRightRadius: '16px'
+      borderTopRightRadius: '16px',
+      overscrollBehavior: 'contain' as const
     },
     toolbarContainer: {
       padding: '0 32px'

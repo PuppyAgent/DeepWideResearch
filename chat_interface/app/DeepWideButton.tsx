@@ -1,14 +1,17 @@
 'use client'
 
 import React, { useState } from 'react'
-import DeepWideGrid, { type DeepWideValue } from './DeepWideGrid'
+import DeepWideGridAlt, { type DeepWideValue } from './DeepWideGridAlt'
 
 export interface DeepWideButtonProps {
   value: DeepWideValue
   onChange: (value: DeepWideValue) => void
+  // Optional visual tweaks for embedding contexts
+  size?: number // button diameter in px (default 36)
+  variant?: 'default' | 'compact'
 }
 
-export default function DeepWideButton({ value, onChange }: DeepWideButtonProps) {
+export default function DeepWideButton({ value, onChange, size = 36, variant = 'default' }: DeepWideButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
 
   // Close panel on outside click
@@ -31,16 +34,28 @@ export default function DeepWideButton({ value, onChange }: DeepWideButtonProps)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [isOpen])
 
+  const buttonSize = Math.max(24, size)
+  const isCompact = variant === 'compact'
+  const iconSize = isCompact ? 12 : 14
+  const closedBorder = isCompact ? '1px solid #4a4a4a' : '1px solid #3a3a3a'
+  const openBorder = '2px solid #4a90e2'
+  const hoverBorder = isCompact ? '#6aa9ea' : '#4a90e2'
+  const closedBg = '#2a2a2a'
+  const openBg = isCompact
+    ? 'linear-gradient(135deg, rgba(74,144,226,0.18) 0%, rgba(74,144,226,0.08) 100%)'
+    : 'linear-gradient(135deg, rgba(74,144,226,0.12) 0%, rgba(255,255,255,0.06) 100%)'
+
   return (
     <div style={{ position: 'relative' }}>
       {/* Popover Panel */}
       <div
         style={{
           position: 'absolute',
-          bottom: '47px',
+          top: 'auto',
+          bottom: `${buttonSize + 11}px`,
           left: '0',
           background: 'linear-gradient(135deg, rgba(25,25,25,0.98) 0%, rgba(15,15,15,0.98) 100%)',
-          border: '1px solid #2a2a2a',
+          border: '1px solid #3a3a3a',
           borderRadius: '14px',
           boxShadow: isOpen
             ? '0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.1)'
@@ -57,7 +72,7 @@ export default function DeepWideButton({ value, onChange }: DeepWideButtonProps)
         aria-hidden={!isOpen}
         data-deepwide-panel
       >
-        <DeepWideGrid value={value} onChange={onChange} />
+        <DeepWideGridAlt value={value} onChange={onChange} />
       </div>
 
       {/* Toggle Button */}
@@ -70,20 +85,18 @@ export default function DeepWideButton({ value, onChange }: DeepWideButtonProps)
         data-deepwide-button
         style={{
           position: 'relative',
-          width: '36px',
-          height: '36px',
-          borderRadius: '18px',
-          border: isOpen ? '2px solid #4a4a4a' : '1px solid #2a2a2a',
-          background: isOpen
-            ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%)'
-            : 'rgba(20, 20, 20, 0.9)',
+          width: `${buttonSize}px`,
+          height: `${buttonSize}px`,
+          borderRadius: `${buttonSize / 2}px`,
+          border: isOpen ? openBorder : closedBorder,
+          background: isOpen ? openBg : closedBg,
           color: isOpen ? '#e6e6e6' : '#bbb',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           cursor: 'pointer',
           boxShadow: isOpen
-            ? '0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.1)'
+            ? 'inset 0 1px 0 rgba(255,255,255,0.1), 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(74,144,226,0.15)'
             : '0 2px 8px rgba(0,0,0,0.3)',
           transition: 'all 200ms ease',
           transform: isOpen ? 'scale(1.05)' : 'scale(1)',
@@ -93,14 +106,14 @@ export default function DeepWideButton({ value, onChange }: DeepWideButtonProps)
         }}
         onMouseEnter={(e) => {
           if (!isOpen) {
-            e.currentTarget.style.borderColor = '#3a3a3a'
+            e.currentTarget.style.borderColor = hoverBorder
             e.currentTarget.style.color = '#e6e6e6'
-            e.currentTarget.style.transform = 'scale(1.08)'
+            e.currentTarget.style.transform = 'scale(1.04)'
           }
         }}
         onMouseLeave={(e) => {
           if (!isOpen) {
-            e.currentTarget.style.borderColor = '#2a2a2a'
+            e.currentTarget.style.borderColor = isCompact ? '#4a4a4a' : '#3a3a3a'
             e.currentTarget.style.color = '#bbb'
             e.currentTarget.style.transform = 'scale(1)'
           } else {
@@ -109,7 +122,7 @@ export default function DeepWideButton({ value, onChange }: DeepWideButtonProps)
         }}
       >
         {/* Icon representing Deep × Wide */}
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+        <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none">
           <rect x="5" y="5" width="5" height="5" stroke="currentColor" strokeWidth="2" />
           <rect x="14" y="5" width="5" height="5" stroke="currentColor" strokeWidth="2" />
           <rect x="5" y="14" width="5" height="5" stroke="currentColor" strokeWidth="2" />

@@ -136,7 +136,7 @@ export default function MCPButton({ service, onServiceChange }: MCPButtonProps) 
           left: '0',
           width: '195px',
           background: 'linear-gradient(135deg, rgba(25,25,25,0.98) 0%, rgba(15,15,15,0.98) 100%)',
-          border: '1px solid #2a2a2a',
+          border: '1px solid #3a3a3a',
           borderRadius: '14px',
           boxShadow: isOpen 
             ? '0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.1)' 
@@ -157,7 +157,7 @@ export default function MCPButton({ service, onServiceChange }: MCPButtonProps) 
           <div style={{ 
             marginBottom: '12px',
             paddingBottom: '8px',
-            borderBottom: '1px solid #2a2a2a',
+            borderBottom: '1px solid #3a3a3a',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between'
@@ -326,7 +326,7 @@ export default function MCPButton({ service, onServiceChange }: MCPButtonProps) 
             <div style={{
               marginTop: '12px',
               paddingTop: '12px',
-              borderTop: '1px solid #2a2a2a'
+              borderTop: '1px solid #3a3a3a'
             }}>
               <div style={{
                 padding: '8px 10px',
@@ -361,7 +361,7 @@ export default function MCPButton({ service, onServiceChange }: MCPButtonProps) 
             <div style={{
               marginTop: '12px',
               paddingTop: '12px',
-              borderTop: '1px solid #2a2a2a'
+              borderTop: '1px solid #3a3a3a'
             }}>
               <div style={{
                 padding: '6px 10px',
@@ -398,8 +398,8 @@ export default function MCPButton({ service, onServiceChange }: MCPButtonProps) 
           height: '36px',
           borderRadius: '18px',
           border: isOpen
-            ? '2px solid #4a4a4a'
-            : '1px solid #2a2a2a',
+            ? '2px solid #5a5a5a'
+            : '1px solid #3a3a3a',
           background: isOpen
             ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%)' 
             : 'rgba(20, 20, 20, 0.9)',
@@ -420,14 +420,14 @@ export default function MCPButton({ service, onServiceChange }: MCPButtonProps) 
         }}
         onMouseEnter={(e) => {
           if (!isOpen) {
-            e.currentTarget.style.borderColor = '#3a3a3a'
+            e.currentTarget.style.borderColor = '#5a5a5a'
             e.currentTarget.style.color = '#e6e6e6'
             e.currentTarget.style.transform = 'scale(1.08)'
           }
         }}
         onMouseLeave={(e) => {
           if (!isOpen) {
-            e.currentTarget.style.borderColor = '#2a2a2a'
+            e.currentTarget.style.borderColor = '#3a3a3a'
             e.currentTarget.style.color = '#bbb'
             e.currentTarget.style.transform = 'scale(1)'
           } else {

@@ -1,7 +1,6 @@
 'use client'
 
 import React from 'react'
-import DeepWideButton from './DeepWideButton'
 import MCPBar, { type McpConfigValue } from './MCPBar'
 
 export interface NewChatLandingProps {
@@ -34,6 +33,9 @@ export default function NewChatLanding({
   const [logoEntered, setLogoEntered] = React.useState(false)
   const fullBrandText = 'Open Deep Wide Research'
   const [brandTextDisplayed, setBrandTextDisplayed] = React.useState('')
+  const [isDeepWideHover, setIsDeepWideHover] = React.useState(false)
+  const deepBlocksRef = React.useRef<HTMLSpanElement>(null)
+  const wideBlocksRef = React.useRef<HTMLSpanElement>(null)
 
   const isBusy = !!externalIsTyping || !!externalIsStreaming
 
@@ -77,6 +79,20 @@ export default function NewChatLanding({
     }
   }, [])
 
+  const BAR_LEN = 12
+  const STEPS = 4
+  const makeBarLine = (label: 'Deep' | 'Wide', v: number) => {
+    const filled = Math.round(v * BAR_LEN)
+    const empty = Math.max(0, BAR_LEN - filled)
+    return `${label.toUpperCase()}: ${'█'.repeat(filled)}${'░'.repeat(empty)} ${Math.round(v * 100)}%`
+  }
+
+  const makeBlocks = (v: number) => {
+    const filled = Math.round(v * BAR_LEN)
+    const empty = Math.max(0, BAR_LEN - filled)
+    return `${'█'.repeat(filled)}${'░'.repeat(empty)}`
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
       <div style={{
@@ -111,7 +127,7 @@ export default function NewChatLanding({
               }} 
             />
           </div>
-          {/* Settings row */}
+          {/* Settings row (MCP only) */}
           <div style={{
             width: '100%',
             display: 'flex',
@@ -123,16 +139,14 @@ export default function NewChatLanding({
             paddingLeft: '32px',
             paddingRight: '32px'
           }}>
-            <DeepWideButton value={researchParams} onChange={onResearchParamsChange} />
-            <div style={{ width: '1px', height: '24px', background: '#2a2a2a' }} />
             <MCPBar value={mcpConfig} onChange={onMcpConfigChange} />
           </div>
 
           {/* Centered search-style input */}
           <div style={{
             display: 'flex',
-            alignItems: 'flex-end',
-            gap: '12px',
+            flexDirection: 'column',
+            gap: '10px',
             border: isFocused ? '2px solid #4a90e2' : '2px solid #3a3a3a',
             borderRadius: '32px',
             paddingLeft:"16px",
@@ -167,7 +181,7 @@ export default function NewChatLanding({
                 backgroundColor: 'transparent',
                 color: '#e5e5e5',
                 border: 'none',
-                minHeight: '96px',
+                minHeight: '72px',
                 boxSizing: 'border-box',
                 maxHeight: '200px',
                 overflowY: 'auto'
@@ -175,7 +189,58 @@ export default function NewChatLanding({
               rows={1}
               className="puppychat-textarea"
             />
-            <button
+            {/* Controls row: Deep/Wide bars (left) + Send button (right) */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div
+                data-deepwide-inline-trigger
+                onMouseEnter={() => setIsDeepWideHover(true)}
+                onMouseLeave={() => setIsDeepWideHover(false)}
+                style={{ fontSize: '12px', color: isDeepWideHover ? '#e5e5e5' : '#888', fontFamily: 'inherit, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', lineHeight: '1.5', whiteSpace: 'pre', cursor: 'pointer', userSelect: 'none', transition: 'color 150ms ease' }}
+                title="Adjust Deep × Wide"
+              >
+                <div
+                  onClick={(e) => {
+                    const targetSpan = deepBlocksRef.current
+                    if (!targetSpan) return
+                    const barRect = targetSpan.getBoundingClientRect()
+                    let xWithin = e.clientX - barRect.left
+                    xWithin = Math.max(0, Math.min(barRect.width - 1, xWithin))
+                    const bucketPx = barRect.width / STEPS
+                    const stepIndex = Math.floor(xWithin / bucketPx)
+                    const next = (stepIndex + 1) / STEPS
+                    onResearchParamsChange({ deep: next, wide: researchParams.wide })
+                  }}
+                >
+                  <span style={{ fontFamily: 'inherit', fontWeight: 700 }}>DEEP:</span>
+                  <span style={{ margin: '0 6px' }} />
+                  <span ref={deepBlocksRef} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>
+                    {makeBlocks(researchParams.deep)}
+                  </span>
+                  <span style={{ fontFamily: 'inherit' }}> {Math.round(researchParams.deep * 100)}%</span>
+                </div>
+                <div
+                  style={{ marginTop: '1px' }}
+                  onClick={(e) => {
+                    const targetSpan = wideBlocksRef.current
+                    if (!targetSpan) return
+                    const barRect = targetSpan.getBoundingClientRect()
+                    let xWithin = e.clientX - barRect.left
+                    xWithin = Math.max(0, Math.min(barRect.width - 1, xWithin))
+                    const bucketPx = barRect.width / STEPS
+                    const stepIndex = Math.floor(xWithin / bucketPx)
+                    const next = (stepIndex + 1) / STEPS
+                    onResearchParamsChange({ deep: researchParams.deep, wide: next })
+                  }}
+                >
+                  <span style={{ fontFamily: 'inherit', fontWeight: 700 }}>WIDE:</span>
+                  <span style={{ margin: '0 6px' }} />
+                  <span ref={wideBlocksRef} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>
+                    {makeBlocks(researchParams.wide)}
+                  </span>
+                  <span style={{ fontFamily: 'inherit' }}> {Math.round(researchParams.wide * 100)}%</span>
+                </div>
+              </div>
+              <button
               onClick={handleSend}
               disabled={!inputValue.trim() || isBusy || disabled}
               style={{
@@ -206,6 +271,7 @@ export default function NewChatLanding({
                 </svg>
               )}
             </button>
+            </div>
           </div>
         </div>
       </div>
