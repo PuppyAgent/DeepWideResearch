@@ -32,6 +32,19 @@ export default function ChatPanel({
   const [streamingStatus, setStreamingStatus] = React.useState('')
   const [streamingHistory, setStreamingHistory] = React.useState<string[]>([])
   const [hasSentFirstMessage, setHasSentFirstMessage] = React.useState(false)
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null)
+  const [suggestionIndex, setSuggestionIndex] = React.useState(0)
+  const recommendedQuestions = [
+    'What were the 2025 Nobel Prizes awarded for?',
+    'Explain quantum computing.',
+    "What's the difference between Databricks and Snowflake?"
+  ]
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      setSuggestionIndex(i => (i + 1) % recommendedQuestions.length)
+    }, 3500)
+    return () => clearInterval(id)
+  }, [])
 
   const handleSend = async () => {
     if (!inputValue.trim() || disabled || !onSendMessage) return
@@ -184,12 +197,20 @@ export default function ChatPanel({
             <div style={inputStyles.inner}>
               <div style={inputStyles.wrapper as React.CSSProperties}>
                 <textarea
+                ref={textareaRef}
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
                   onKeyPress={handleKeyPress}
+                onKeyDown={(e) => {
+                  if (e.key === 'Tab' && !e.shiftKey && !inputValue.trim()) {
+                    e.preventDefault()
+                    setInputValue(recommendedQuestions[suggestionIndex])
+                    textareaRef.current?.focus()
+                  }
+                }}
                   onFocus={() => setIsFocused(true)}
                   onBlur={() => setIsFocused(false)}
-                  placeholder={placeholder}
+                placeholder={recommendedQuestions[suggestionIndex]}
                   style={inputStyles.textarea}
                   className="puppychat-textarea"
                   rows={1}

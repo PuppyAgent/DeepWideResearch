@@ -258,7 +258,7 @@ export default function ChatInterface({
       overscrollBehavior: 'contain' as const
     },
     toolbarContainer: {
-      padding: '0 32px'
+      padding: '20px 8px'
     }
   }
 

@@ -36,6 +36,8 @@ export default function NewChatLanding({
   const [isDeepWideHover, setIsDeepWideHover] = React.useState(false)
   const deepBlocksRef = React.useRef<HTMLSpanElement>(null)
   const wideBlocksRef = React.useRef<HTMLSpanElement>(null)
+  const textareaRef = React.useRef<HTMLTextAreaElement>(null)
+  const [suggestionIndex, setSuggestionIndex] = React.useState(0)
 
   const isBusy = !!externalIsTyping || !!externalIsStreaming
 
@@ -93,6 +95,20 @@ export default function NewChatLanding({
     return `${'█'.repeat(filled)}${'░'.repeat(empty)}`
   }
 
+  const recommendedQuestions = [
+    'What were the 2025 Nobel Prizes awarded for?',
+    'Explain quantum computing.',
+    "What's the difference between Databricks and Snowflake?"
+  ]
+
+  // Rotate subtle suggestions for placeholder
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      setSuggestionIndex((i) => (i + 1) % recommendedQuestions.length)
+    }, 3500)
+    return () => clearInterval(id)
+  }, [])
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
       <div style={{
@@ -130,14 +146,16 @@ export default function NewChatLanding({
           {/* Settings row (MCP only) */}
           <div style={{
             width: '100%',
+            maxWidth: '720px',
+            margin: '0 auto',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'flex-start',
+            justifyContent: 'center',
             gap: '8px',
-            marginRight:"90px",
-            marginLeft:"90px",
             paddingLeft: '32px',
-            paddingRight: '32px'
+            paddingRight: '32px',
+            paddingTop: '8px',
+            paddingBottom: '0px'
           }}>
             <MCPBar value={mcpConfig} onChange={onMcpConfigChange} />
           </div>
@@ -163,12 +181,19 @@ export default function NewChatLanding({
             margin: '0 auto'
           }}>
             <textarea
+              ref={textareaRef}
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
               onKeyPress={handleKeyPress}
+              onKeyDown={(e) => {
+                if (e.key === 'Tab' && !e.shiftKey && !inputValue.trim()) {
+                  e.preventDefault()
+                  setInputValue(recommendedQuestions[suggestionIndex])
+                }
+              }}
               onFocus={() => setIsFocused(true)}
               onBlur={() => setIsFocused(false)}
-              placeholder={placeholder}
+              placeholder={`${recommendedQuestions[suggestionIndex]}`}
               style={{
                 flex: 1,
                 height: 'auto',
@@ -195,7 +220,7 @@ export default function NewChatLanding({
                 data-deepwide-inline-trigger
                 onMouseEnter={() => setIsDeepWideHover(true)}
                 onMouseLeave={() => setIsDeepWideHover(false)}
-                style={{ fontSize: '12px', color: isDeepWideHover ? '#e5e5e5' : '#888', fontFamily: 'inherit, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', lineHeight: '1.5', whiteSpace: 'pre', cursor: 'pointer', userSelect: 'none', transition: 'color 150ms ease' }}
+                style={{ fontSize: '12px', color: isDeepWideHover ? '#e5e5e5' : '#888', fontFamily: 'inherit, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', lineHeight: '1.5', whiteSpace: 'pre', cursor: 'ew-resize', userSelect: 'none', transition: 'color 150ms ease, background 150ms ease', paddingLeft: '8px', paddingRight: '8px', paddingTop: '6px', paddingBottom: '6px', borderRadius: '8px', background: isDeepWideHover ? 'rgba(255,255,255,0.04)' : 'transparent', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}
                 title="Adjust Deep × Wide"
               >
                 <div
@@ -210,16 +235,53 @@ export default function NewChatLanding({
                     const next = (stepIndex + 1) / STEPS
                     onResearchParamsChange({ deep: next, wide: researchParams.wide })
                   }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 0', borderRadius: '6px', cursor: 'inherit' }}
                 >
-                  <span style={{ fontFamily: 'inherit', fontWeight: 700 }}>DEEP:</span>
+                  <span style={{ fontFamily: 'inherit', fontWeight: 400 }}>DEEP:</span>
                   <span style={{ margin: '0 6px' }} />
                   <span ref={deepBlocksRef} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>
                     {makeBlocks(researchParams.deep)}
                   </span>
-                  <span style={{ fontFamily: 'inherit' }}> {Math.round(researchParams.deep * 100)}%</span>
+                  <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', display: 'inline-block', width: '4ch', textAlign: 'right' }}>{Math.round(researchParams.deep * 100)}%</span>
+                  <div style={{ display: 'flex', gap: '4px', opacity: isDeepWideHover ? 1 : 0, transition: 'opacity 150ms ease', marginLeft: '6px' }}>
+                    <button
+                      type="button"
+                      title="Decrease depth"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const step = 0.25
+                        const next = Math.max(step, Math.round((researchParams.deep - step) / step) * step)
+                        onResearchParamsChange({ deep: next, wide: researchParams.wide })
+                      }}
+                      style={{ width: '18px', height: '18px', borderRadius: '9px', border: 'none', background: 'transparent', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = '#e6e6e6' }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = '#888' }}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+                        <path d="M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      title="Increase depth"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const step = 0.25
+                        const next = Math.min(1, Math.round((researchParams.deep + step) / step) * step)
+                        onResearchParamsChange({ deep: next, wide: researchParams.wide })
+                      }}
+                      style={{ width: '18px', height: '18px', borderRadius: '9px', border: 'none', background: 'transparent', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = '#e6e6e6' }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = '#888' }}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
                 <div
-                  style={{ marginTop: '1px' }}
+                  style={{ marginTop: '1px', display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 0', borderRadius: '6px', cursor: 'inherit' }}
                   onClick={(e) => {
                     const targetSpan = wideBlocksRef.current
                     if (!targetSpan) return
@@ -232,12 +294,48 @@ export default function NewChatLanding({
                     onResearchParamsChange({ deep: researchParams.deep, wide: next })
                   }}
                 >
-                  <span style={{ fontFamily: 'inherit', fontWeight: 700 }}>WIDE:</span>
+                  <span style={{ fontFamily: 'inherit', fontWeight: 400 }}>WIDE:</span>
                   <span style={{ margin: '0 6px' }} />
                   <span ref={wideBlocksRef} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>
                     {makeBlocks(researchParams.wide)}
                   </span>
-                  <span style={{ fontFamily: 'inherit' }}> {Math.round(researchParams.wide * 100)}%</span>
+                  <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', display: 'inline-block', width: '4ch', textAlign: 'right' }}>{Math.round(researchParams.wide * 100)}%</span>
+                  <div style={{ display: 'flex', gap: '4px', opacity: isDeepWideHover ? 1 : 0, transition: 'opacity 150ms ease', marginLeft: '6px' }}>
+                    <button
+                      type="button"
+                      title="Decrease width"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const step = 0.25
+                        const next = Math.max(step, Math.round((researchParams.wide - step) / step) * step)
+                        onResearchParamsChange({ deep: researchParams.deep, wide: next })
+                      }}
+                      style={{ width: '18px', height: '18px', borderRadius: '9px', border: 'none', background: 'transparent', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = '#e6e6e6' }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = '#888' }}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+                        <path d="M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                    <button
+                      type="button"
+                      title="Increase width"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        const step = 0.25
+                        const next = Math.min(1, Math.round((researchParams.wide + step) / step) * step)
+                        onResearchParamsChange({ deep: researchParams.deep, wide: next })
+                      }}
+                      style={{ width: '18px', height: '18px', borderRadius: '9px', border: 'none', background: 'transparent', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
+                      onMouseEnter={(e) => { e.currentTarget.style.color = '#e6e6e6' }}
+                      onMouseLeave={(e) => { e.currentTarget.style.color = '#888' }}
+                    >
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
+                        <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               </div>
               <button
@@ -273,6 +371,8 @@ export default function NewChatLanding({
             </button>
             </div>
           </div>
+
+          {/* Subtle suggestions are provided via rotating placeholder and Tab acceptance; no visible chips */}
         </div>
       </div>
     </div>
