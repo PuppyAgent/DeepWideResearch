@@ -24,3 +24,8 @@ html, body {
   overflow: hidden;
   box-sizing: border-box;
 }
+
+/* Normalize placeholder size for shared textarea class */
+.puppychat-textarea::placeholder {
+  font-size: 16px;
+}

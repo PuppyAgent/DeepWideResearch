@@ -3,21 +3,19 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from './supabase/SupabaseAuthProvider'
 import dynamic from 'next/dynamic'
-import DeepWideGrid from './DeepWideGrid'
-import MCPBar from './MCPBar'
-import HistoryToggleButton from './headercomponent/HistoryToggleButton'
-import NewChatButton from './headercomponent/NewChatButton'
-import SessionsOverlay from './headercomponent/SessionsOverlay'
-import UserMenu from './headercomponent/UserMenu'
-import DevModePanel from './headercomponent/DevModePanel'
+// Grid and MCP controls are composed inside ChatPanel
+ 
+import DevModePanel from './headercomponent/DevModeButton'
+import MainHeaderBar from './headercomponent/MainHeaderBar'
 import { useRouter } from 'next/navigation'
 import { useSession } from './context/SessionContext'
 import type { Message as UIMessage } from '../components/component/ChatInterface'
+import { useUiMessages } from './hooks/useUiMessages'
  
 
-// Dynamically import local ChatMain component, disable SSR to avoid document undefined error
-const ChatMain = dynamic(
-  () => import('../components/ChatMain'),
+// Dynamically import ChatPanel (composes settings buttons and ChatInterface)
+const ChatPanel = dynamic(
+  () => import('./ChatPanel'),
   { ssr: false }
 )
 
@@ -51,14 +49,11 @@ export default function Home() {
     switchSession,
     deleteSession,
     addMessage,
-    updateMessages,
-    getCurrentMessages,
     saveSessionToBackend
   } = useSession()
 
   // UI state
   const [researchParams, setResearchParams] = useState<{ deep: number; wide: number }>({ deep: 1.0, wide: 1.0 })
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState(240)
   const [isSidebarMenuOpen, setIsSidebarMenuOpen] = useState(false)
   const [isDevModeOpen, setIsDevModeOpen] = useState(false)
@@ -66,8 +61,6 @@ export default function Home() {
   const [showCreateSuccess, setShowCreateSuccess] = useState(false)
   const [balance, setBalance] = useState<number | null>(null)
   const [balanceLoading, setBalanceLoading] = useState(false)
-  const [composerValue, setComposerValue] = useState('')
-  const [isComposerFocused, setIsComposerFocused] = useState(false)
   
   // 📜 Cache streaming history for each session (session_id -> streamingHistory[])
   const [sessionStreamingCache, setSessionStreamingCache] = useState<Record<string, string[]>>({})
@@ -98,37 +91,22 @@ export default function Home() {
     console.log('📌 currentSessionId changed to:', currentSessionId)
   }, [currentSessionId])
 
-  // Add logic to close settings panel and dev panel on outside click
+  // Close Dev Mode panel on outside click
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (isSettingsOpen || isDevModeOpen) {
-        const target = event.target as Element
-        const settingsPanel = document.querySelector('[data-settings-panel]')
-        const settingsButton = document.querySelector('[data-settings-button]')
-        const devPanel = document.querySelector('[data-dev-panel]')
-        const devButton = document.querySelector('[data-dev-button]')
-        
-        if (settingsPanel && settingsButton) {
-          const isClickInPanel = settingsPanel.contains(target)
-          const isClickOnButton = settingsButton.contains(target)
-          
-          if (!isClickInPanel && !isClickOnButton) {
-            setIsSettingsOpen(false)
-          }
-        }
-        if (isDevModeOpen && devPanel) {
-          const isClickInDev = devPanel.contains(target)
-          const isClickOnDevButton = devButton ? devButton.contains(target) : false
-          if (!isClickInDev && !isClickOnDevButton) {
-            setIsDevModeOpen(false)
-          }
-        }
+      if (!isDevModeOpen) return
+      const target = event.target as Element
+      const devPanel = document.querySelector('[data-dev-panel]')
+      const devButton = document.querySelector('[data-dev-button]')
+      const isClickInDev = devPanel ? devPanel.contains(target) : false
+      const isClickOnDevButton = devButton ? devButton.contains(target) : false
+      if (!isClickInDev && !isClickOnDevButton) {
+        setIsDevModeOpen(false)
       }
     }
-    
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [isSettingsOpen, isDevModeOpen])
+  }, [isDevModeOpen])
   const [mcpConfig, setMcpConfig] = useState({
     services: [
       { 
@@ -228,43 +206,8 @@ export default function Home() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [isSidebarMenuOpen])
 
-  // Map messages from Context to UI messages
-  const uiMessages: UIMessage[] = React.useMemo(() => {
-    // Get current session messages directly from chatHistory, avoid async issues with getCurrentMessages
-    const currentMessages = currentSessionId ? (chatHistory[currentSessionId] || []) : []
-    console.log('🔄 uiMessages recalculating, currentSessionId:', currentSessionId, 'messages:', currentMessages.length)
-    
-    // Get cached streaming history for current session
-    const cachedHistory = currentSessionId ? sessionStreamingCache[currentSessionId] : undefined
-    
-    // Find the last assistant message index
-    let lastAssistantIdx = -1
-    for (let i = currentMessages.length - 1; i >= 0; i--) {
-      if (currentMessages[i].role === 'assistant') {
-        lastAssistantIdx = i
-        break
-      }
-    }
-    
-    const result = currentMessages.map((m, idx) => {
-      const baseMessage = {
-        id: `${m.timestamp ?? idx}-${idx}`,
-        content: m.content,
-        sender: (m.role === 'assistant' ? 'bot' : 'user') as 'bot' | 'user',
-        timestamp: new Date(m.timestamp ?? Date.now())
-      }
-      
-      // If it's the last assistant message and we have cached streaming history, attach it
-      if (m.role === 'assistant' && idx === lastAssistantIdx && cachedHistory && cachedHistory.length > 0) {
-        console.log('📜 Attaching cached history to last assistant message:', cachedHistory.length, 'steps')
-        return { ...baseMessage, streamingHistory: cachedHistory }
-      }
-      
-      return baseMessage
-    })
-    console.log('✅ uiMessages result:', result.length, 'messages', cachedHistory ? `with cached history (${cachedHistory.length} steps)` : '')
-    return result
-  }, [chatHistory, currentSessionId, sessionStreamingCache]) // Depends on chatHistory, currentSessionId, and sessionStreamingCache
+  // Map messages from Context to UI messages via hook (keeps this file lean)
+  const uiMessages: UIMessage[] = useUiMessages(chatHistory as any, currentSessionId, sessionStreamingCache)
 
   // Decide whether to show a splash (logo) while chat history is loading/preparing
   const hasSession = !!currentSessionId
@@ -376,13 +319,17 @@ export default function Home() {
       // Call streaming API - use environment variable or default local address
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
       const token = await getAccessToken()
+      // Pre-emit connecting state to unblock UI immediately
+      onStreamUpdate?.('Connecting…', true, [])
       const response = await fetch(`${apiUrl}/api/research`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'text/event-stream',
           ...(token ? { Authorization: `Bearer ${token}` } : {})
         },
         body: JSON.stringify(requestData),
+        cache: 'no-store'
       })
 
       if (!response.ok) {
@@ -398,15 +345,20 @@ export default function Home() {
       let finalReport = ''
       let isGeneratingReport = false
 
-      // Read streaming response
+      // Read streaming response (buffer-safe)
+      const decoder = new TextDecoder()
+      let pending = ''
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
 
-        const chunk = new TextDecoder().decode(value)
-        const lines = chunk.split('\n')
+        pending += decoder.decode(value, { stream: true })
+        const lines = pending.split('\n')
+        // keep the last partial line in pending
+        pending = lines.pop() || ''
         
-        for (const line of lines) {
+        for (const rawLine of lines) {
+          const line = rawLine.trimEnd()
           if (line.startsWith('data: ')) {
             try {
               const data = JSON.parse(line.slice(6))
@@ -552,126 +504,23 @@ export default function Home() {
             minHeight: 0
           }}>
             {/* Top control bar (independent width) */}
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                justifyContent: 'space-between', 
-                padding: '0 8px', 
-                position: 'relative',
-                flexShrink: 0,
-                width: '100%',
-                maxWidth: '900px'
-              }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <HistoryToggleButton
-                  isOpen={isSidebarMenuOpen}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setIsSidebarMenuOpen(prev => !prev)
-                  }}
-                />
-
-                <NewChatButton
-                  isCreating={isCreatingSession}
-                  showSuccess={showCreateSuccess}
-                  onClick={handleCreateNewChat}
-                />
-
-                {/* Overlay panel under the toggle button */}
-                <SessionsOverlay
-                  isOpen={isSidebarMenuOpen}
-                  sidebarWidth={sidebarWidth}
-                  sessions={sessions}
-                  selectedSessionId={currentSessionId}
-                  isLoading={isLoadingSessions}
-                  onSessionClick={handleSessionClick}
-                  onCreateNew={handleCreateNewChat}
-                  onDeleteSession={handleDeleteSession}
-                />
-              </div>
-
-              {/* Center area intentionally left empty (logo removed) */}
-
-              {/* Right side: User menu | Credits + Dev Mode pill */}
-              <div style={{ width: 'auto' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  {/* Dev Mode + Credits Pill */}
-                  <div 
-                    data-dev-button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setIsDevModeOpen(prev => !prev)
-                    }}
-                    title={isDevModeOpen ? 'Close Dev Mode' : 'Open Dev Mode'}
-                    style={{
-                      height: '36px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '0 12px 0 4px',
-                      borderRadius: '18px',
-                      border: '1px solid #2a2a2a',
-                      background: 'rgba(20,20,20,0.9)',
-                      backdropFilter: 'blur(8px)',
-                      cursor: 'pointer',
-                      transition: 'all 200ms ease'
-                    }}
-                    onMouseEnter={(e) => {
-                      if (!isDevModeOpen) {
-                        e.currentTarget.style.borderColor = '#3a3a3a'
-                        e.currentTarget.style.background = 'rgba(25,25,25,0.9)'
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (!isDevModeOpen) {
-                        e.currentTarget.style.borderColor = '#2a2a2a'
-                        e.currentTarget.style.background = 'rgba(20,20,20,0.9)'
-                      }
-                    }}
-                  >
-                    {/* Dev Mode Icon */}
-                    <div style={{
-                      width: '28px',
-                      height: '28px',
-                      borderRadius: '14px',
-                      border: isDevModeOpen ? '2px solid #4a4a4a' : '1px solid #2a2a2a',
-                      background: isDevModeOpen
-                        ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%)'
-                        : 'rgba(30, 30, 30, 0.9)',
-                      color: isDevModeOpen ? '#e6e6e6' : '#bbb',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      boxShadow: isDevModeOpen
-                        ? '0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.1)'
-                        : '0 2px 8px rgba(0,0,0,0.3)',
-                      transition: 'all 200ms ease',
-                    }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <path d="M8 16L4 12L8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                        <path d="M16 8L20 12L16 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      </svg>
-                    </div>
-                    
-                    {/* Credits Display */}
-                    <div style={{
-                      color: '#4599DF',
-                      fontSize: '14px',
-                      fontWeight: '600',
-                      lineHeight: '12px',
-                      minWidth: '24px',
-                      textAlign: 'left'
-                    }}>
-                      {balanceLoading ? '—' : `${balance ?? '—'}`}
-                    </div>
-                  </div>
-                  
-                  <UserMenu />
-                </div>
-              </div>
-              </div>
-            </div>
+            <MainHeaderBar
+              isSidebarMenuOpen={isSidebarMenuOpen}
+              onToggleSidebarMenu={() => setIsSidebarMenuOpen(prev => !prev)}
+              isCreatingSession={isCreatingSession}
+              showCreateSuccess={showCreateSuccess}
+              onCreateNewChat={handleCreateNewChat}
+              sessions={sessions}
+              currentSessionId={currentSessionId}
+              isLoadingSessions={isLoadingSessions}
+              onSessionClick={handleSessionClick}
+              onDeleteSession={handleDeleteSession}
+              sidebarWidth={sidebarWidth}
+              isDevModeOpen={isDevModeOpen}
+              onToggleDevMode={() => setIsDevModeOpen(prev => !prev)}
+              balance={balance}
+              balanceLoading={balanceLoading}
+            />
 
             {/* Dev Mode Panel (aligned with header width) */}
             <div style={{ display: 'flex', justifyContent: 'center' }}>
@@ -697,31 +546,23 @@ export default function Home() {
                   <img src="/SimpleDWlogo.svg" alt="Deep Wide Research" width={52} height={52} style={{ opacity: 0.95 }} />
                 </div>
               ) : (
-                <ChatMain
+                <ChatPanel
                   key={chatComponentKey}
                   initialMessages={uiMessages.length > 0 ? uiMessages : undefined}
                   onSendMessage={handleSendMessage}
-                  title="Deep Wide Research"
                   placeholder="Ask anything about your research topic..."
                   welcomeMessage="Welcome to Deep & Wide Research! I'm your AI research assistant ready to conduct comprehensive research and provide detailed insights. What would you like to explore today?"
-                  width="100%"
-                  height="100%"
-          recommendedQuestions={[
-            "What are the key differences between Databricks and Snowflake?",
-            "Explain quantum computing and its applications",
-            "What are the latest trends in AI research?",
-          ]}
-                showHeader={false}
-          backgroundColor="transparent"
-          borderWidth={3}
-          showAvatar={false}
-          messagesMaxWidth="900px"
-                
-          />
+                  messagesMaxWidth="900px"
+                  researchParams={researchParams}
+                  onResearchParamsChange={setResearchParams}
+                  mcpConfig={mcpConfig}
+                  onMcpConfigChange={setMcpConfig}
+                  style={{ height: '100%' }}
+                />
               )}
             </div>
 
-            {/* External composer removed to use ChatInterface's original input styling */}
+            {/* Composer is managed inside ChatPanel */}
           </div>
         </div>
       </div>
