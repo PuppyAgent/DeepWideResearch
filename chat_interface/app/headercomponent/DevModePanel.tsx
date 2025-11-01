@@ -174,7 +174,9 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
       })
       if (res.ok) {
         const data = await res.json()
-        setBalance(typeof data.balance === 'number' ? data.balance : null)
+        const raw = (data as any)?.balance
+        const numeric = typeof raw === 'number' ? raw : (typeof raw === 'string' ? Number(raw) : NaN)
+        setBalance(Number.isFinite(numeric) ? numeric : null)
       }
     } catch (e) {
       console.warn('Failed to load balance', e)
@@ -487,7 +489,7 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
                         <div className='flex items-start gap-2'>
                           <span className='text-[#2CAC58]'>[✓]</span>
                           <div>
-                            <div><strong className='text-foreground/90'>100 credits</strong> per month</div>
+                            <div><strong className='text-[#4599DF]'>100</strong> <span className='text-foreground/90'>credits</span> per month</div>
                             <div className='text-[10px] text-foreground/50 mt-0.5'>≈ 5 full deep wide researches</div>
                           </div>
                         </div>
@@ -508,15 +510,18 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
                       </div>
                       <div className='space-y-2 text-[12px] text-foreground/70 mb-4 flex-grow'>
                         <div className='flex items-start gap-2'>
-                          <span className='#2CAC58'>[✓]</span>
-                          <span><strong className='text-foreground/90'>2,000 credits</strong> per month</span>
+                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <div>
+                            <div><strong className='text-[#4599DF]'>2,000</strong> <span className='text-foreground/90'>credits</span> per month</div>
+                            <div className='text-[10px] text-foreground/50 mt-0.5'>≈ 100 full deep wide researches</div>
+                          </div>
                         </div>
                         <div className='flex items-start gap-2'>
-                          <span className='#2CAC58'>[✓]</span>
+                          <span className='text-[#2CAC58]'>[✓]</span>
                           <span>API & SDK access</span>
                         </div>
                         <div className='flex items-start gap-2'>
-                          <span className='#2CAC58'>[✓]</span>
+                          <span className='text-[#2CAC58]'>[✓]</span>
                           <span>Priority support</span>
                         </div>
                         
@@ -558,20 +563,23 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
                       </div>
                       <div className='space-y-2 text-[12px] text-foreground/70 mb-4 flex-grow'>
                         <div className='flex items-start gap-2'>
-                          <span className='#2CAC58'>[✓]</span>
-                          <span><strong className='text-foreground/90'>15,000 credits</strong> per month</span>
+                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <div>
+                            <div><strong className='text-[#4599DF]'>15,000</strong> <span className='text-foreground/90'>credits</span> per month</div>
+                            <div className='text-[10px] text-foreground/50 mt-0.5'>≈ 750 full deep wide researches</div>
+                          </div>
                         </div>
                         <div className='flex items-start gap-2'>
-                          <span className='#2CAC58'>[✓]</span>
+                          <span className='text-[#2CAC58]'>[✓]</span>
                           <span>API & SDK access</span>
                         </div>
                         <div className='flex items-start gap-2'>
-                          <span className='#2CAC58'>[✓]</span>
+                          <span className='text-[#2CAC58]'>[✓]</span>
                           <span>Dedicated support</span>
                         </div>
                         
                         <div className='flex items-start gap-2'>
-                          <span className='#2CAC58'>[✓]</span>
+                          <span className='text-[#2CAC58]'>[✓]</span>
                           <span>Custom integrations</span>
                         </div>
                         <div className='flex items-start gap-2'>
@@ -606,12 +614,18 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
                         <span className='text-[18px] font-bold text-foreground/90'>Custom</span>
                       </div>
                       <div className='space-y-2 text-[12px] text-foreground/70 mb-4 flex-grow'>
-                        <div className='flex items-start gap-2'><span className='#2CAC58'>[✓]</span><span><strong className='text-foreground/90'>Unlimited credits</strong></span></div>
-                        <div className='flex items-start gap-2'><span className='#2CAC58'>[✓]</span><span>API & SDK access</span></div>
-                        <div className='flex items-start gap-2'><span className='#2CAC58'>[✓]</span><span>24/7 dedicated support</span></div>
+                        <div className='flex items-start gap-2'>
+                          <span className='text-[#2CAC58]'>[✓]</span>
+                          <div>
+                            <div><strong className='text-[#4599DF]'>Unlimited</strong> <span className='text-foreground/90'>credits</span></div>
+                            <div className='text-[10px] text-foreground/50 mt-0.5'>≈ Unlimited full deep wide researches</div>
+                          </div>
+                        </div>
+                        <div className='flex items-start gap-2'><span className='text-[#2CAC58]'>[✓]</span><span>API & SDK access</span></div>
+                        <div className='flex items-start gap-2'><span className='text-[#2CAC58]'>[✓]</span><span>24/7 dedicated support</span></div>
                         
-                        <div className='flex items-start gap-2'><span className='#2CAC58'>[✓]</span><span>Custom integrations</span></div>
-                        <div className='flex items-start gap-2'><span className='#2CAC58'>[✓]</span><span>SLA & compliance</span></div>
+                        <div className='flex items-start gap-2'><span className='text-[#2CAC58]'>[✓]</span><span>Custom integrations</span></div>
+                        <div className='flex items-start gap-2'><span className='text-[#2CAC58]'>[✓]</span><span>SLA & compliance</span></div>
                       </div>
                       <a href='mailto:guantum@puppyagent.com' className='w-full text-center border border-[#2CAC58] bg-[#2CAC58]/10 hover:bg-[#2CAC58]/20 px-4 py-2.5 text-[12px] font-semibold text-foreground/90 transition-all rounded-md'>
                         Contact Sales
