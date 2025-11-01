@@ -264,6 +264,12 @@ export default function Home() {
     return result
   }, [chatHistory, currentSessionId, sessionStreamingCache]) // Depends on chatHistory, currentSessionId, and sessionStreamingCache
 
+  // Decide whether to show a splash (logo) while chat history is loading/preparing
+  const hasSession = !!currentSessionId
+  const isTempSession = currentSessionId ? currentSessionId.startsWith('temp-') : false
+  const hasLoadedCurrent = hasSession ? (chatHistory[currentSessionId!] !== undefined) : false
+  const showChatSplash = !hasSession || (!isTempSession && !hasLoadedCurrent) || isLoadingChat
+
   // Handle creating new chat
   const handleCreateNewChat = async () => {
     if (isCreatingSession) return
@@ -674,180 +680,191 @@ export default function Home() {
               display: 'flex',
               flexDirection: 'column'
             }}>
-              <ChatMain
-                key={chatComponentKey}
-                initialMessages={uiMessages.length > 0 ? uiMessages : undefined}
-                onSendMessage={handleSendMessage}
-                title="Deep Wide Research"
-                placeholder="Ask anything about your research topic..."
-                welcomeMessage="Welcome to Deep & Wide Research! I'm your AI research assistant ready to conduct comprehensive research and provide detailed insights. What would you like to explore today?"
-                width="100%"
-                height="100%"
-        recommendedQuestions={[
-          "What are the key differences between Databricks and Snowflake?",
-          "Explain quantum computing and its applications",
-          "What are the latest trends in AI research?",
-        ]}
-              showHeader={false}
-        backgroundColor="transparent"
-        borderWidth={3}
-        showAvatar={false}
-              headerLeft={(
-                <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <HistoryToggleButton
-                    isOpen={isSidebarMenuOpen}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setIsSidebarMenuOpen(prev => !prev)
-                    }}
-                  />
-
-                  <NewChatButton
-                    isCreating={isCreatingSession}
-                    showSuccess={showCreateSuccess}
-                    onClick={handleCreateNewChat}
-                  />
-
-                  {/* Overlay panel under the toggle button */}
-                  <SessionsOverlay
-                    isOpen={isSidebarMenuOpen}
-                    sidebarWidth={sidebarWidth}
-                    sessions={sessions}
-                    selectedSessionId={currentSessionId}
-                    isLoading={isLoadingSessions}
-                    onSessionClick={handleSessionClick}
-                    onCreateNew={handleCreateNewChat}
-                    onDeleteSession={handleDeleteSession}
-                  />
-                </div>
-              )}
-          aboveInput={
-            <div 
-              style={{ 
-                display: 'flex',
-                gap: '8px',
-                position: 'relative'
-              }}
-            >
-              {/* Deep/Wide Settings */}
-              <div style={{ position: 'relative', width: '36px', height: '36px' }}>
-                {/* Settings Panel */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    bottom: '47px',
-                    left: '0',
-                    width: '195px',
-                  background: 'linear-gradient(135deg, rgba(25,25,25,0.98) 0%, rgba(15,15,15,0.98) 100%)',
-                  border: '1px solid #2a2a2a',
-                  borderRadius: '14px',
-                  boxShadow: isSettingsOpen 
-                    ? '0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.1)' 
-                    : '0 4px 12px rgba(0,0,0,0.3)',
-                  overflow: 'visible',
-                  opacity: isSettingsOpen ? 1 : 0,
-                  transform: isSettingsOpen ? 'translateY(0) scale(1)' : 'translateY(-10px) scale(0.95)',
-                  transition: 'all 300ms cubic-bezier(0.34, 1.56, 0.64, 1)',
-                  pointerEvents: isSettingsOpen ? 'auto' : 'none',
-                  backdropFilter: 'blur(12px)',
-                  zIndex: 10
-                }}
-                aria-hidden={!isSettingsOpen}
-                onClick={(e) => e.stopPropagation()}
-                data-settings-panel
-              >
-                {/* Grid Content */}
-                <div style={{ padding: '14px' }}>
-                  <DeepWideGrid
-                    value={researchParams}
-                    onChange={(newParams) => {
-                      console.log('🔄 Page: Updating research params:', newParams)
-                      setResearchParams(newParams)
-                    }}
-                    cellSize={20}
-                    innerBorder={2}
-                    outerPadding={4}
-                  />
-                </div>
-              </div>
-
-              {/* Toggle Button */}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setIsSettingsOpen(!isSettingsOpen)
-                }}
-                data-settings-button
-                title="Research Settings"
-                style={{
-                  position: 'relative',
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '18px',
-                  border: isSettingsOpen 
-                    ? '2px solid #4a4a4a' 
-                    : '1px solid #2a2a2a',
-                  background: isSettingsOpen 
-                    ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%)' 
-                    : 'rgba(20, 20, 20, 0.9)',
-                  color: isSettingsOpen ? '#e6e6e6' : '#bbb',
+              {showChatSplash ? (
+                <div style={{
+                  flex: 1,
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  boxShadow: isSettingsOpen 
-                    ? '0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.1)' 
-                    : '0 2px 8px rgba(0,0,0,0.3)',
-                  transition: 'all 200ms ease',
-                  transform: isSettingsOpen ? 'rotate(180deg) scale(1.05)' : 'rotate(0deg) scale(1)',
-                  backdropFilter: 'blur(8px)',
-                  padding: 0,
-                  margin: 0,
-                  zIndex: 11
-                }}
-                onMouseEnter={(e) => {
-                  if (!isSettingsOpen) {
-                    e.currentTarget.style.borderColor = '#3a3a3a'
-                    e.currentTarget.style.color = '#e6e6e6'
-                    e.currentTarget.style.transform = 'scale(1.08)'
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isSettingsOpen) {
-                    e.currentTarget.style.borderColor = '#2a2a2a'
-                    e.currentTarget.style.color = '#bbb'
-                    e.currentTarget.style.transform = 'scale(1)'
-                  }
+                  justifyContent: 'center'
+                }}>
+                  <img src="/SimpleDWlogo.svg" alt="Deep Wide Research" width={52} height={52} style={{ opacity: 0.95 }} />
+                </div>
+              ) : (
+                <ChatMain
+                  key={chatComponentKey}
+                  initialMessages={uiMessages.length > 0 ? uiMessages : undefined}
+                  onSendMessage={handleSendMessage}
+                  title="Deep Wide Research"
+                  placeholder="Ask anything about your research topic..."
+                  welcomeMessage="Welcome to Deep & Wide Research! I'm your AI research assistant ready to conduct comprehensive research and provide detailed insights. What would you like to explore today?"
+                  width="100%"
+                  height="100%"
+          recommendedQuestions={[
+            "What are the key differences between Databricks and Snowflake?",
+            "Explain quantum computing and its applications",
+            "What are the latest trends in AI research?",
+          ]}
+                showHeader={false}
+          backgroundColor="transparent"
+          borderWidth={3}
+          showAvatar={false}
+                headerLeft={(
+                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <HistoryToggleButton
+                      isOpen={isSidebarMenuOpen}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setIsSidebarMenuOpen(prev => !prev)
+                      }}
+                    />
+
+                    <NewChatButton
+                      isCreating={isCreatingSession}
+                      showSuccess={showCreateSuccess}
+                      onClick={handleCreateNewChat}
+                    />
+
+                    {/* Overlay panel under the toggle button */}
+                    <SessionsOverlay
+                      isOpen={isSidebarMenuOpen}
+                      sidebarWidth={sidebarWidth}
+                      sessions={sessions}
+                      selectedSessionId={currentSessionId}
+                      isLoading={isLoadingSessions}
+                      onSessionClick={handleSessionClick}
+                      onCreateNew={handleCreateNewChat}
+                      onDeleteSession={handleDeleteSession}
+                    />
+                  </div>
+                )}
+            aboveInput={
+              <div 
+                style={{ 
+                  display: 'flex',
+                  gap: '8px',
+                  position: 'relative'
                 }}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M4 6H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  <circle cx="8" cy="6" r="2.5" fill="currentColor"/>
-                  <path d="M4 12H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  <circle cx="14" cy="12" r="2.5" fill="currentColor"/>
-                  <path d="M4 18H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                  <circle cx="10" cy="18" r="2.5" fill="currentColor"/>
-                </svg>
-              </button>
+                {/* Deep/Wide Settings */}
+                <div style={{ position: 'relative', width: '36px', height: '36px' }}>
+                  {/* Settings Panel */}
+                  <div
+                    style={{
+                      position: 'absolute',
+                      bottom: '47px',
+                      left: '0',
+                      width: '195px',
+                    background: 'linear-gradient(135deg, rgba(25,25,25,0.98) 0%, rgba(15,15,15,0.98) 100%)',
+                    border: '1px solid #2a2a2a',
+                    borderRadius: '14px',
+                    boxShadow: isSettingsOpen 
+                      ? '0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.1)' 
+                      : '0 4px 12px rgba(0,0,0,0.3)',
+                    overflow: 'visible',
+                    opacity: isSettingsOpen ? 1 : 0,
+                    transform: isSettingsOpen ? 'translateY(0) scale(1)' : 'translateY(-10px) scale(0.95)',
+                    transition: 'all 300ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+                    pointerEvents: isSettingsOpen ? 'auto' : 'none',
+                    backdropFilter: 'blur(12px)',
+                    zIndex: 10
+                  }}
+                  aria-hidden={!isSettingsOpen}
+                  onClick={(e) => e.stopPropagation()}
+                  data-settings-panel
+                >
+                  {/* Grid Content */}
+                  <div style={{ padding: '14px' }}>
+                    <DeepWideGrid
+                      value={researchParams}
+                      onChange={(newParams) => {
+                        console.log('🔄 Page: Updating research params:', newParams)
+                        setResearchParams(newParams)
+                      }}
+                      cellSize={20}
+                      innerBorder={2}
+                      outerPadding={4}
+                    />
+                  </div>
+                </div>
+
+                {/* Toggle Button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setIsSettingsOpen(!isSettingsOpen)
+                  }}
+                  data-settings-button
+                  title="Research Settings"
+                  style={{
+                    position: 'relative',
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '18px',
+                    border: isSettingsOpen 
+                      ? '2px solid #4a4a4a' 
+                      : '1px solid #2a2a2a',
+                    background: isSettingsOpen 
+                      ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%)' 
+                      : 'rgba(20, 20, 20, 0.9)',
+                    color: isSettingsOpen ? '#e6e6e6' : '#bbb',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    boxShadow: isSettingsOpen 
+                      ? '0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.1)' 
+                      : '0 2px 8px rgba(0,0,0,0.3)',
+                    transition: 'all 200ms ease',
+                    transform: isSettingsOpen ? 'rotate(180deg) scale(1.05)' : 'rotate(0deg) scale(1)',
+                    backdropFilter: 'blur(8px)',
+                    padding: 0,
+                    margin: 0,
+                    zIndex: 11
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!isSettingsOpen) {
+                      e.currentTarget.style.borderColor = '#3a3a3a'
+                      e.currentTarget.style.color = '#e6e6e6'
+                      e.currentTarget.style.transform = 'scale(1.08)'
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!isSettingsOpen) {
+                      e.currentTarget.style.borderColor = '#2a2a2a'
+                      e.currentTarget.style.color = '#bbb'
+                      e.currentTarget.style.transform = 'scale(1)'
+                    }
+                  }}
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M4 6H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    <circle cx="8" cy="6" r="2.5" fill="currentColor"/>
+                    <path d="M4 12H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    <circle cx="14" cy="12" r="2.5" fill="currentColor"/>
+                    <path d="M4 18H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    <circle cx="10" cy="18" r="2.5" fill="currentColor"/>
+                  </svg>
+                </button>
+                </div>
+
+                {/* Separator Line */}
+                <div style={{
+                  width: '1px',
+                  height: '20px',
+                  backgroundColor: '#3a3a3a',
+                  margin: '0 4px',
+                  alignSelf: 'center'
+                }} />
+
+                {/* MCP Services Bar */}
+                <MCPBar
+                  value={mcpConfig}
+                  onChange={setMcpConfig}
+                />
               </div>
-
-              {/* Separator Line */}
-              <div style={{
-                width: '1px',
-                height: '20px',
-                backgroundColor: '#3a3a3a',
-                margin: '0 4px',
-                alignSelf: 'center'
-              }} />
-
-              {/* MCP Services Bar */}
-              <MCPBar
-                value={mcpConfig}
-                onChange={setMcpConfig}
-              />
-            </div>
-          }
-        />
+            }
+          />
+              )}
             </div>
           </div>
         </div>
