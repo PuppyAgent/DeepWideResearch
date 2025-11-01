@@ -173,9 +173,9 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
         headers: { 'Authorization': token ? `Bearer ${token}` : '' }
       })
       if (res.ok) {
-        const data = await res.json()
-        const raw = (data as any)?.balance
-        const numeric = typeof raw === 'number' ? raw : (typeof raw === 'string' ? Number(raw) : NaN)
+        const data = (await res.json()) as Record<string, unknown>
+        const rawUnknown = data?.['balance']
+        const numeric = typeof rawUnknown === 'number' ? rawUnknown : (typeof rawUnknown === 'string' ? Number(rawUnknown) : NaN)
         setBalance(Number.isFinite(numeric) ? numeric : null)
       }
     } catch (e) {
