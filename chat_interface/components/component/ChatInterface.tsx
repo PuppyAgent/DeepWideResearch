@@ -42,6 +42,10 @@ export interface ChatInterfaceProps {
   // Optional slots in the header for user-defined components
   headerLeft?: React.ReactNode
   headerRight?: React.ReactNode
+  // Control visibility of built-in input area
+  showInput?: boolean
+  // Constrain the visible width of message content while allowing the scroll container to span full width
+  messagesMaxWidth?: number | string
 }
 
 // Add a global identifier to avoid adding styles repeatedly
@@ -90,7 +94,9 @@ export default function ChatInterface({
   showHeaderIcon = true,
   aboveInput,
   headerLeft,
-  headerRight
+  headerRight,
+  showInput = true,
+  messagesMaxWidth = '900px'
 }: ChatInterfaceProps = {}) {
   const resolvedBg = bg ?? backgroundColor
   // Create default initial messages using welcomeMessage
@@ -834,131 +840,133 @@ export default function ChatInterface({
 
       {/* Messages */}
       <div ref={messagesContainerRef} style={styles.messagesContainer} className="puppychat-messages puppychat-history">
-        {messages.map((message, index) => {
-          // If it's the welcome message and we're streaming it, show the partial content
-          const isWelcomeMessage = index === 0 && message.sender === 'bot' && messages.length === 1
-          const displayContent = (isWelcomeMessage && isStreamingWelcome) ? displayedWelcome : message.content
+        <div style={{ width: '100%', maxWidth: messagesMaxWidth, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          {messages.map((message, index) => {
+            // If it's the welcome message and we're streaming it, show the partial content
+            const isWelcomeMessage = index === 0 && message.sender === 'bot' && messages.length === 1
+            const displayContent = (isWelcomeMessage && isStreamingWelcome) ? displayedWelcome : message.content
+            
+            return message.sender === 'bot' ? (
+              <BotMessage
+                key={message.id}
+                message={{ ...message, content: displayContent }}
+                showAvatar={false}
+                isStreaming={isWelcomeMessage && isStreamingWelcome}
+                streamingHistory={message.streamingHistory || []}  // 显示保存的时间线
+              />
+            ) : (
+              <UserMessage
+                key={message.id}
+                message={message}
+                showAvatar={false}
+              />
+            )
+          })}
           
-          return message.sender === 'bot' ? (
-            <BotMessage
-              key={message.id}
-              message={{ ...message, content: displayContent }}
-              showAvatar={false}
-              isStreaming={isWelcomeMessage && isStreamingWelcome}
-              streamingHistory={message.streamingHistory || []}  // 显示保存的时间线
-            />
-          ) : (
-            <UserMessage
-              key={message.id}
-              message={message}
-              showAvatar={false}
-            />
-          )
-        })}
-        
-        {/* Recommended Questions in Message Area */}
-        {shouldShowRecommendedQuestions && (
-          <div style={{ 
-            display: 'flex', 
-            flexDirection: 'column', 
-            gap: '12px',
-            marginTop: '20px',
-            alignItems: 'flex-end'
-          }}>
-            {recommendedQuestions.slice(0, visibleQuestionsCount).map((question, index) => (
-              <div
-                key={index}
-                onClick={() => handleRecommendedQuestionClick(question)}
-                style={{
-                  padding: '12px 16px',
-                  background: 'linear-gradient(135deg, rgba(74, 144, 226, 0.1), rgba(74, 144, 226, 0.05))',
-                  border: '1px solid rgba(74, 144, 226, 0.3)',
-                  borderRadius: '28px',
-                  color: '#4a90e2',
-                  fontSize: '14px',
-                  cursor: 'pointer',
-                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  maxWidth: '75%',
-                  backdropFilter: 'blur(10px)',
-                  position: 'relative',
-                  overflow: 'hidden',
-                  userSelect: 'none',
-                  boxShadow: '0 2px 8px rgba(74, 144, 226, 0.1)',
-                  fontWeight: '500',
-                  animation: 'slideInFromRight 300ms ease-out forwards',
-                  animationDelay: `${index * 50}ms`,
-                  opacity: 0
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(74, 144, 226, 0.2), rgba(74, 144, 226, 0.15))'
-                  e.currentTarget.style.borderColor = 'rgba(74, 144, 226, 0.5)'
-                  e.currentTarget.style.color = '#357abd'
-                  e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)'
-                  e.currentTarget.style.boxShadow = '0 8px 25px rgba(74, 144, 226, 0.25)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'linear-gradient(135deg, rgba(74, 144, 226, 0.1), rgba(74, 144, 226, 0.05))'
-                  e.currentTarget.style.borderColor = 'rgba(74, 144, 226, 0.3)'
-                  e.currentTarget.style.color = '#4a90e2'
-                  e.currentTarget.style.transform = 'translateY(0px) scale(1)'
-                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(74, 144, 226, 0.1)'
-                }}
-                onMouseDown={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0px) scale(0.98)'
-                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(74, 144, 226, 0.2)'
-                }}
-                onMouseUp={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)'
-                  e.currentTarget.style.boxShadow = '0 8px 25px rgba(74, 144, 226, 0.25)'
-                }}
-              >
-                <div style={{
-                  position: 'absolute',
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  background: 'linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.1) 50%, transparent 70%)',
-                  opacity: 0,
-                  transition: 'opacity 0.3s ease'
-                }} />
-                <span style={{ 
-                  position: 'relative', 
-                  zIndex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px'
-                }}>
-                  {question}
-                  <span style={{
-                    fontSize: '10px',
-                    opacity: 0.7,
-                    marginLeft: '4px'
+          {/* Recommended Questions in Message Area */}
+          {shouldShowRecommendedQuestions && (
+            <div style={{ 
+              display: 'flex', 
+              flexDirection: 'column', 
+              gap: '12px',
+              marginTop: '20px',
+              alignItems: 'flex-end'
+            }}>
+              {recommendedQuestions.slice(0, visibleQuestionsCount).map((question, index) => (
+                <div
+                  key={index}
+                  onClick={() => handleRecommendedQuestionClick(question)}
+                  style={{
+                    padding: '12px 16px',
+                    background: 'linear-gradient(135deg, rgba(74, 144, 226, 0.1), rgba(74, 144, 226, 0.05))',
+                    border: '1px solid rgba(74, 144, 226, 0.3)',
+                    borderRadius: '28px',
+                    color: '#4a90e2',
+                    fontSize: '14px',
+                    cursor: 'pointer',
+                    transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                    maxWidth: '75%',
+                    backdropFilter: 'blur(10px)',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    userSelect: 'none',
+                    boxShadow: '0 2px 8px rgba(74, 144, 226, 0.1)',
+                    fontWeight: '500',
+                    animation: 'slideInFromRight 300ms ease-out forwards',
+                    animationDelay: `${index * 50}ms`,
+                    opacity: 0
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, rgba(74, 144, 226, 0.2), rgba(74, 144, 226, 0.15))'
+                    e.currentTarget.style.borderColor = 'rgba(74, 144, 226, 0.5)'
+                    e.currentTarget.style.color = '#357abd'
+                    e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)'
+                    e.currentTarget.style.boxShadow = '0 8px 25px rgba(74, 144, 226, 0.25)'
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'linear-gradient(135deg, rgba(74, 144, 226, 0.1), rgba(74, 144, 226, 0.05))'
+                    e.currentTarget.style.borderColor = 'rgba(74, 144, 226, 0.3)'
+                    e.currentTarget.style.color = '#4a90e2'
+                    e.currentTarget.style.transform = 'translateY(0px) scale(1)'
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(74, 144, 226, 0.1)'
+                  }}
+                  onMouseDown={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0px) scale(0.98)'
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(74, 144, 226, 0.2)'
+                  }}
+                  onMouseUp={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px) scale(1.02)'
+                    e.currentTarget.style.boxShadow = '0 8px 25px rgba(74, 144, 226, 0.25)'
+                  }}
+                >
+                  <div style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    background: 'linear-gradient(45deg, transparent 30%, rgba(255, 255, 255, 0.1) 50%, transparent 70%)',
+                    opacity: 0,
+                    transition: 'opacity 0.3s ease'
+                  }} />
+                  <span style={{ 
+                    position: 'relative', 
+                    zIndex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px'
                   }}>
-                    ↗
+                    {question}
+                    <span style={{
+                      fontSize: '10px',
+                      opacity: 0.7,
+                      marginLeft: '4px'
+                    }}>
+                      ↗
+                    </span>
                   </span>
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-        
-        {(isTyping || isStreaming) && (
-          <BotMessage 
-            message={{
-              id: 'typing',
-              content: streamingStatus || '',
-              sender: 'bot',
-              timestamp: new Date()
-            }}
-            isTyping={isTyping && !isStreaming}
-            streamingStatus={isStreaming ? streamingStatus : undefined}
-            streamingHistory={streamingHistory} 
-            isStreaming={isStreaming}
-            showAvatar={false}
-          />
-        )}
-        <div ref={messagesEndRef} />
+                </div>
+              ))}
+            </div>
+          )}
+          
+          {(isTyping || isStreaming) && (
+            <BotMessage 
+              message={{
+                id: 'typing',
+                content: streamingStatus || '',
+                sender: 'bot',
+                timestamp: new Date()
+              }}
+              isTyping={isTyping && !isStreaming}
+              streamingStatus={isStreaming ? streamingStatus : undefined}
+              streamingHistory={streamingHistory} 
+              isStreaming={isStreaming}
+              showAvatar={false}
+            />
+          )}
+          <div ref={messagesEndRef} />
+        </div>
       </div>
 
       {/* Above-input custom area */}
@@ -969,44 +977,46 @@ export default function ChatInterface({
       )}
 
       {/* Input */}
-      <div style={styles.inputContainer}>
-        <div style={styles.inputWrapper}>
-          <textarea
-          ref={textareaRef}
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
-            onFocus={() => setIsFocused(true)}
-            onBlur={() => setIsFocused(false)}
-            placeholder={placeholder}
-          style={styles.textarea}
-          className="puppychat-textarea"
-            rows={1}
-          />
-          <button
-            onClick={handleSendMessage}
-            disabled={!inputValue.trim() || isTyping || disabled}
-            style={{
-              ...styles.sendButton,
-              backgroundColor: inputValue.trim() && !isTyping ? '#4a90e2' : '#3a3a3a',
-              color: '#ffffff',
-              boxShadow: inputValue.trim() && !isTyping ? '0 4px 12px rgba(74, 144, 226, 0.3)' : '0 2px 8px rgba(0, 0, 0, 0.2)',
-              opacity: !inputValue.trim() || isTyping ? 0.3 : 1
-            }}
-          >
-            {isTyping ? (
-              <svg style={{ animation: 'spin 1s linear infinite', height: '24px', width: '24px' }} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"></circle>
-                <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-            ) : (
-              <svg style={{ width: '24px', height: '20px' }} fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 4L12 16M12 4L6 10M12 4L18 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
-              </svg>
-            )}
-          </button>
+      {showInput && (
+        <div style={styles.inputContainer}>
+          <div style={styles.inputWrapper}>
+            <textarea
+            ref={textareaRef}
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyPress={handleKeyPress}
+              onFocus={() => setIsFocused(true)}
+              onBlur={() => setIsFocused(false)}
+              placeholder={placeholder}
+            style={styles.textarea}
+            className="puppychat-textarea"
+              rows={1}
+            />
+            <button
+              onClick={handleSendMessage}
+              disabled={!inputValue.trim() || isTyping || disabled}
+              style={{
+                ...styles.sendButton,
+                backgroundColor: inputValue.trim() && !isTyping ? '#4a90e2' : '#3a3a3a',
+                color: '#ffffff',
+                boxShadow: inputValue.trim() && !isTyping ? '0 4px 12px rgba(74, 144, 226, 0.3)' : '0 2px 8px rgba(0, 0, 0, 0.2)',
+                opacity: !inputValue.trim() || isTyping ? 0.3 : 1
+              }}
+            >
+              {isTyping ? (
+                <svg style={{ animation: 'spin 1s linear infinite', height: '24px', width: '24px' }} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"></circle>
+                  <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <svg style={{ width: '24px', height: '20px' }} fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12 4L12 16M12 4L6 10M12 4L18 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

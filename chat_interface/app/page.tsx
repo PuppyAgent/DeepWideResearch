@@ -66,6 +66,8 @@ export default function Home() {
   const [showCreateSuccess, setShowCreateSuccess] = useState(false)
   const [balance, setBalance] = useState<number | null>(null)
   const [balanceLoading, setBalanceLoading] = useState(false)
+  const [composerValue, setComposerValue] = useState('')
+  const [isComposerFocused, setIsComposerFocused] = useState(false)
   
   // 📜 Cache streaming history for each session (session_id -> streamingHistory[])
   const [sessionStreamingCache, setSessionStreamingCache] = useState<Record<string, string[]>>({})
@@ -542,7 +544,6 @@ export default function Home() {
         }}>
           <div style={{ 
             width: '100%', 
-            maxWidth: '900px', 
             height: '100%', 
             display: 'flex', 
             flexDirection: 'column', 
@@ -550,15 +551,18 @@ export default function Home() {
             overflow: 'hidden',
             minHeight: 0
           }}>
-            {/* Top control bar */}
-            <div style={{ 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'space-between', 
-              padding: '0 32px', 
-              position: 'relative',
-              flexShrink: 0
-            }}>
+            {/* Top control bar (independent width) */}
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <div style={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'space-between', 
+                padding: '0 8px', 
+                position: 'relative',
+                flexShrink: 0,
+                width: '100%',
+                maxWidth: '900px'
+              }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <HistoryToggleButton
                   isOpen={isSidebarMenuOpen}
@@ -666,11 +670,14 @@ export default function Home() {
                   <UserMenu />
                 </div>
               </div>
+              </div>
             </div>
 
-            {/* Dev Mode Panel (absolute inside header container) */}
-            <div data-dev-panel>
-              <DevModePanel isOpen={isDevModeOpen} onClose={() => setIsDevModeOpen(false)} />
+            {/* Dev Mode Panel (aligned with header width) */}
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <div style={{ width: '100%', maxWidth: '900px' }} data-dev-panel>
+                <DevModePanel isOpen={isDevModeOpen} onClose={() => setIsDevModeOpen(false)} />
+              </div>
             </div>
 
             {/* ChatMain wrapper - fill remaining space */}
@@ -708,163 +715,225 @@ export default function Home() {
           backgroundColor="transparent"
           borderWidth={3}
           showAvatar={false}
-                headerLeft={(
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <HistoryToggleButton
-                      isOpen={isSidebarMenuOpen}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        setIsSidebarMenuOpen(prev => !prev)
-                      }}
-                    />
-
-                    <NewChatButton
-                      isCreating={isCreatingSession}
-                      showSuccess={showCreateSuccess}
-                      onClick={handleCreateNewChat}
-                    />
-
-                    {/* Overlay panel under the toggle button */}
-                    <SessionsOverlay
-                      isOpen={isSidebarMenuOpen}
-                      sidebarWidth={sidebarWidth}
-                      sessions={sessions}
-                      selectedSessionId={currentSessionId}
-                      isLoading={isLoadingSessions}
-                      onSessionClick={handleSessionClick}
-                      onCreateNew={handleCreateNewChat}
-                      onDeleteSession={handleDeleteSession}
-                    />
-                  </div>
-                )}
-            aboveInput={
-              <div 
-                style={{ 
-                  display: 'flex',
-                  gap: '8px',
-                  position: 'relative'
-                }}
-              >
-                {/* Deep/Wide Settings */}
-                <div style={{ position: 'relative', width: '36px', height: '36px' }}>
-                  {/* Settings Panel */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      bottom: '47px',
-                      left: '0',
-                      width: '195px',
-                    background: 'linear-gradient(135deg, rgba(25,25,25,0.98) 0%, rgba(15,15,15,0.98) 100%)',
-                    border: '1px solid #2a2a2a',
-                    borderRadius: '14px',
-                    boxShadow: isSettingsOpen 
-                      ? '0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.1)' 
-                      : '0 4px 12px rgba(0,0,0,0.3)',
-                    overflow: 'visible',
-                    opacity: isSettingsOpen ? 1 : 0,
-                    transform: isSettingsOpen ? 'translateY(0) scale(1)' : 'translateY(-10px) scale(0.95)',
-                    transition: 'all 300ms cubic-bezier(0.34, 1.56, 0.64, 1)',
-                    pointerEvents: isSettingsOpen ? 'auto' : 'none',
-                    backdropFilter: 'blur(12px)',
-                    zIndex: 10
-                  }}
-                  aria-hidden={!isSettingsOpen}
-                  onClick={(e) => e.stopPropagation()}
-                  data-settings-panel
-                >
-                  {/* Grid Content */}
-                  <div style={{ padding: '14px' }}>
-                    <DeepWideGrid
-                      value={researchParams}
-                      onChange={(newParams) => {
-                        console.log('🔄 Page: Updating research params:', newParams)
-                        setResearchParams(newParams)
-                      }}
-                      cellSize={20}
-                      innerBorder={2}
-                      outerPadding={4}
-                    />
-                  </div>
-                </div>
-
-                {/* Toggle Button */}
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setIsSettingsOpen(!isSettingsOpen)
-                  }}
-                  data-settings-button
-                  title="Research Settings"
-                  style={{
-                    position: 'relative',
-                    width: '36px',
-                    height: '36px',
-                    borderRadius: '18px',
-                    border: isSettingsOpen 
-                      ? '2px solid #4a4a4a' 
-                      : '1px solid #2a2a2a',
-                    background: isSettingsOpen 
-                      ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%)' 
-                      : 'rgba(20, 20, 20, 0.9)',
-                    color: isSettingsOpen ? '#e6e6e6' : '#bbb',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    cursor: 'pointer',
-                    boxShadow: isSettingsOpen 
-                      ? '0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.1)' 
-                      : '0 2px 8px rgba(0,0,0,0.3)',
-                    transition: 'all 200ms ease',
-                    transform: isSettingsOpen ? 'rotate(180deg) scale(1.05)' : 'rotate(0deg) scale(1)',
-                    backdropFilter: 'blur(8px)',
-                    padding: 0,
-                    margin: 0,
-                    zIndex: 11
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isSettingsOpen) {
-                      e.currentTarget.style.borderColor = '#3a3a3a'
-                      e.currentTarget.style.color = '#e6e6e6'
-                      e.currentTarget.style.transform = 'scale(1.08)'
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isSettingsOpen) {
-                      e.currentTarget.style.borderColor = '#2a2a2a'
-                      e.currentTarget.style.color = '#bbb'
-                      e.currentTarget.style.transform = 'scale(1)'
-                    }
-                  }}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M4 6H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                    <circle cx="8" cy="6" r="2.5" fill="currentColor"/>
-                    <path d="M4 12H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                    <circle cx="14" cy="12" r="2.5" fill="currentColor"/>
-                    <path d="M4 18H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
-                    <circle cx="10" cy="18" r="2.5" fill="currentColor"/>
-                  </svg>
-                </button>
-                </div>
-
-                {/* Separator Line */}
-                <div style={{
-                  width: '1px',
-                  height: '20px',
-                  backgroundColor: '#3a3a3a',
-                  margin: '0 4px',
-                  alignSelf: 'center'
-                }} />
-
-                {/* MCP Services Bar */}
-                <MCPBar
-                  value={mcpConfig}
-                  onChange={setMcpConfig}
-                />
-              </div>
-            }
+          showInput={false}
+          messagesMaxWidth="900px"
+                
           />
               )}
+            </div>
+
+            {/* Toolbar + Composer (same width) */}
+            <div style={{ display: 'flex', justifyContent: 'center', padding: '0 8px' }}>
+              <div style={{ width: '100%', maxWidth: '900px' }}>
+                <div 
+                  style={{ 
+                    display: 'flex',
+                    gap: '8px',
+                    position: 'relative',
+                    marginTop: '8px'
+                  }}
+                >
+                  {/* Deep/Wide Settings */}
+                  <div style={{ position: 'relative', width: '36px', height: '36px' }}>
+                    {/* Settings Panel */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        bottom: '47px',
+                        left: '0',
+                        width: '195px',
+                        background: 'linear-gradient(135deg, rgba(25,25,25,0.98) 0%, rgba(15,15,15,0.98) 100%)',
+                        border: '1px solid #2a2a2a',
+                        borderRadius: '14px',
+                        boxShadow: isSettingsOpen 
+                          ? '0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.1)' 
+                          : '0 4px 12px rgba(0,0,0,0.3)',
+                        overflow: 'visible',
+                        opacity: isSettingsOpen ? 1 : 0,
+                        transform: isSettingsOpen ? 'translateY(0) scale(1)' : 'translateY(-10px) scale(0.95)',
+                        transition: 'all 300ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+                        pointerEvents: isSettingsOpen ? 'auto' : 'none',
+                        backdropFilter: 'blur(12px)',
+                        zIndex: 10
+                      }}
+                      aria-hidden={!isSettingsOpen}
+                      onClick={(e) => e.stopPropagation()}
+                      data-settings-panel
+                    >
+                      {/* Grid Content */}
+                      <div style={{ padding: '14px' }}>
+                        <DeepWideGrid
+                          value={researchParams}
+                          onChange={(newParams) => {
+                            console.log('🔄 Page: Updating research params:', newParams)
+                            setResearchParams(newParams)
+                          }}
+                          cellSize={20}
+                          innerBorder={2}
+                          outerPadding={4}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Toggle Button */}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setIsSettingsOpen(!isSettingsOpen)
+                      }}
+                      data-settings-button
+                      title="Research Settings"
+                      style={{
+                        position: 'relative',
+                        width: '36px',
+                        height: '36px',
+                        borderRadius: '18px',
+                        border: isSettingsOpen 
+                          ? '2px solid #4a4a4a' 
+                          : '1px solid #2a2a2a',
+                        background: isSettingsOpen 
+                          ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%)' 
+                          : 'rgba(20, 20, 20, 0.9)',
+                        color: isSettingsOpen ? '#e6e6e6' : '#bbb',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        boxShadow: isSettingsOpen 
+                          ? '0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.1)' 
+                          : '0 2px 8px rgba(0,0,0,0.3)',
+                        transition: 'all 200ms ease',
+                        transform: isSettingsOpen ? 'rotate(180deg) scale(1.05)' : 'rotate(0deg) scale(1)',
+                        backdropFilter: 'blur(8px)',
+                        padding: 0,
+                        margin: 0,
+                        zIndex: 11
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!isSettingsOpen) {
+                          e.currentTarget.style.borderColor = '#3a3a3a'
+                          e.currentTarget.style.color = '#e6e6e6'
+                          e.currentTarget.style.transform = 'scale(1.08)'
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!isSettingsOpen) {
+                          e.currentTarget.style.borderColor = '#2a2a2a'
+                          e.currentTarget.style.color = '#bbb'
+                          e.currentTarget.style.transform = 'scale(1)'
+                        }
+                      }}
+                    >
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M4 6H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        <circle cx="8" cy="6" r="2.5" fill="currentColor"/>
+                        <path d="M4 12H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        <circle cx="14" cy="12" r="2.5" fill="currentColor"/>
+                        <path d="M4 18H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                        <circle cx="10" cy="18" r="2.5" fill="currentColor"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* Separator Line */}
+                  <div style={{
+                    width: '1px',
+                    height: '20px',
+                    backgroundColor: '#3a3a3a',
+                    margin: '0 4px',
+                    alignSelf: 'center'
+                  }} />
+
+                  {/* MCP Services Bar */}
+                  <MCPBar
+                    value={mcpConfig}
+                    onChange={setMcpConfig}
+                  />
+                </div>
+                <div style={{ padding: '20px 0' }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'flex-end',
+                    gap: '12px',
+                    border: isComposerFocused ? '2px solid #4a90e2' : '2px solid #3a3a3a',
+                    borderRadius: '16px',
+                    padding: '8px',
+                    backgroundColor: '#2a2a2a',
+                    boxShadow: isComposerFocused 
+                      ? 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06), 0 0 0 2px rgba(74, 144, 226, 0.15)'
+                      : 'inset 0 2px 4px 0 rgba(0, 0, 0, 0.06)',
+                    transition: 'all 0.3s ease'
+                  }}>
+                    <textarea
+                      value={composerValue}
+                      onChange={(e) => setComposerValue(e.target.value)}
+                      onFocus={() => setIsComposerFocused(true)}
+                      onBlur={() => setIsComposerFocused(false)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault()
+                          if (composerValue.trim()) {
+                            void (async () => {
+                              await handleSendMessage(composerValue)
+                              setComposerValue('')
+                            })()
+                          }
+                        }
+                      }}
+                      placeholder="Ask anything about your research topic..."
+                      rows={1}
+                      style={{
+                        flex: 1,
+                        height: 'auto',
+                        padding: '8px',
+                        resize: 'none',
+                        outline: 'none',
+                        fontSize: '16px',
+                        lineHeight: '1.5',
+                        fontFamily: 'inherit',
+                        backgroundColor: 'transparent',
+                        color: '#e5e5e5',
+                        border: 'none',
+                        minHeight: '40px',
+                        boxSizing: 'border-box',
+                        maxHeight: '200px',
+                        overflowY: 'auto'
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        if (composerValue.trim()) {
+                          void (async () => {
+                            await handleSendMessage(composerValue)
+                            setComposerValue('')
+                          })()
+                        }
+                      }}
+                      disabled={!composerValue.trim()}
+                      style={{
+                        width: '40px',
+                        height: '40px',
+                        borderRadius: '50%',
+                        border: 'none',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: composerValue.trim() ? 'pointer' : 'default',
+                        transition: 'all 0.3s ease',
+                        flexShrink: 0,
+                        backgroundColor: composerValue.trim() ? '#4a90e2' : '#3a3a3a',
+                        color: '#ffffff',
+                        boxShadow: composerValue.trim() ? '0 4px 12px rgba(74, 144, 226, 0.3)' : '0 2px 8px rgba(0, 0, 0, 0.2)',
+                        opacity: composerValue.trim() ? 1 : 0.3
+                      }}
+                    >
+                      <svg style={{ width: '24px', height: '20px' }} fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 4L12 16M12 4L6 10M12 4L18 10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" fill="none"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
