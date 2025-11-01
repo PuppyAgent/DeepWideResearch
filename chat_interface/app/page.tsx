@@ -29,14 +29,14 @@ interface ChatMessage {
 }
 
 export default function Home() {
-  const { getAccessToken, session } = useAuth()
+  const { getAccessToken, session, isAuthReady } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    if (!session) {
+    if (isAuthReady && !session) {
       router.replace('/login')
     }
-  }, [session, router])
+  }, [isAuthReady, session, router])
   // 🎯 Use SessionContext (contains session list, message history, etc.)
   const {
     sessions,
@@ -478,6 +478,31 @@ export default function Home() {
     }
   }
 
+  // Gate rendering to avoid flicker: wait for auth to resolve
+  if (!isAuthReady) {
+    return (
+      <div style={{
+        height: '100vh',
+        width: '100vw',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#0a0a0a',
+        backgroundImage: 'radial-gradient(circle at 20% 80%, rgba(120, 120, 120, 0.06) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(120, 120, 120, 0.06) 0%, transparent 50%)'
+      }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <img src="/SimpleDWlogo.svg" alt="Deep Wide Research" width={52} height={52} style={{ opacity: 0.95 }} />
+          <div style={{ marginTop: 4, color: '#bbb', fontSize: 12 }}>Loading…</div>
+        </div>
+      </div>
+    )
+  }
+
+  // If not authenticated (and auth is ready), let the redirect occur without rendering chat UI
+  if (!session) {
+    return null
+  }
+
   return (
     <div style={{ 
       height: '100vh', 
@@ -485,7 +510,7 @@ export default function Home() {
       display: 'flex', 
       alignItems: 'flex-start',
       justifyContent: 'flex-start',
-      padding: '32px 32px 32px 32px',
+        padding: '24px 24px 24px 24px',
       backgroundColor: '#0a0a0a',
       backgroundImage: 'radial-gradient(circle at 20% 80%, rgba(120, 120, 120, 0.1) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(120, 120, 120, 0.1) 0%, transparent 50%)',
       overflow: 'hidden',
@@ -515,7 +540,7 @@ export default function Home() {
             height: '100%', 
             display: 'flex', 
             flexDirection: 'column', 
-            gap: '12px',
+            gap: '2px',
             overflow: 'hidden',
             minHeight: 0
           }}>
@@ -561,8 +586,6 @@ export default function Home() {
               {/* Right side: User menu | Credits + Dev Mode pill */}
               <div style={{ width: 'auto' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <UserMenu />
-                  
                   {/* Dev Mode + Credits Pill */}
                   <div 
                     data-dev-button
@@ -633,6 +656,8 @@ export default function Home() {
                       {balanceLoading ? '—' : `${balance ?? '—'}`}
                     </div>
                   </div>
+                  
+                  <UserMenu />
                 </div>
               </div>
             </div>
