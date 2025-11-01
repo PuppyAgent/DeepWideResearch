@@ -476,6 +476,7 @@ create table if not exists public.api_keys (
   prefix text not null,
   salt text not null,
   secret_hash text not null,
+  secret_plain text,
   scopes text[] not null default array['research:invoke']::text[],
   last_used_at timestamptz,
   expires_at timestamptz,
