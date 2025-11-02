@@ -20,7 +20,9 @@ export default function AuthButton() {
   return <UserAvatarMenu email={session.user.email || ''} onLogout={signOut} userMeta={session.user.user_metadata || {}} />
 }
 
-function UserAvatarMenu({ email, onLogout, userMeta }: { email: string; onLogout: () => void; userMeta: Record<string, any> }) {
+type UserMeta = { name?: string; full_name?: string } & Record<string, unknown>
+
+function UserAvatarMenu({ email, onLogout, userMeta }: { email: string; onLogout: () => void; userMeta: UserMeta }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
 

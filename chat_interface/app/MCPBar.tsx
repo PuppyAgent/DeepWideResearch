@@ -81,6 +81,7 @@ interface AddMCPButtonProps {
 
 function AddMCPButton({ removedServices, onRestoreService }: AddMCPButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [isAddHover, setIsAddHover] = useState(false)
 
   // Close panel on outside click
   React.useEffect(() => {
@@ -267,26 +268,45 @@ function AddMCPButton({ removedServices, onRestoreService }: AddMCPButtonProps) 
         </div>
       </div>
 
+      <div style={{ display: 'flex', alignItems: 'center' }}>
       <button
         onClick={(e) => {
           e.stopPropagation()
           setIsOpen(!isOpen)
         }}
-        title="Add MCP Services"
+          onMouseEnter={(e) => {
+            setIsAddHover(true)
+            if (!isOpen) {
+              e.currentTarget.style.borderColor = '#5a5a5a'
+              e.currentTarget.style.color = '#e6e6e6'
+              e.currentTarget.style.transform = 'scale(1.08)'
+            }
+          }}
+          onMouseLeave={(e) => {
+            setIsAddHover(false)
+            if (!isOpen) {
+              e.currentTarget.style.borderColor = '#5a5a5a'
+              e.currentTarget.style.color = '#666'
+              e.currentTarget.style.transform = 'scale(1)'
+            }
+          }}
+          title="Add source"
+          aria-label="Add source"
         data-add-mcp-button
         style={{
           position: 'relative',
-          width: '36px',
           height: '36px',
+            padding: '0 12px',
           borderRadius: '18px',
           border: isOpen ? '2px solid #5a5a5a' : '1px dashed #5a5a5a',
           background: isOpen 
             ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%)'
             : 'rgba(20, 20, 20, 0.5)',
-          color: isOpen ? '#e6e6e6' : '#666',
+            color: isOpen ? '#e6e6e6' : '#888',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+            gap: '6px',
           cursor: 'pointer',
           boxShadow: isOpen
             ? '0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.1)'
@@ -294,40 +314,16 @@ function AddMCPButton({ removedServices, onRestoreService }: AddMCPButtonProps) 
           transition: 'all 200ms ease',
           transform: isOpen ? 'scale(1.05)' : 'scale(1)',
           backdropFilter: 'blur(8px)',
-          padding: 0,
           margin: 0,
-          opacity: isOpen ? 1 : 0.6
-        }}
-        onMouseEnter={(e) => {
-          if (!isOpen) {
-            e.currentTarget.style.borderColor = '#5a5a5a'
-            e.currentTarget.style.color = '#e6e6e6'
-            e.currentTarget.style.transform = 'scale(1.08)'
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (!isOpen) {
-            e.currentTarget.style.borderColor = '#5a5a5a'
-            e.currentTarget.style.color = '#666'
-            e.currentTarget.style.transform = 'scale(1)'
-          }
+            opacity: isOpen ? 1 : (isAddHover ? 0.9 : 0.7)
         }}
       >
-        <svg 
-          width="14" 
-          height="14" 
-          viewBox="0 0 24 24" 
-          fill="none"
-        >
-          <path 
-            d="M12 5v14M5 12h14" 
-            stroke="currentColor" 
-            strokeWidth="2" 
-            strokeLinecap="round" 
-            strokeLinejoin="round"
-          />
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
+          <span style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>source</span>
       </button>
+      </div>
     </div>
   )
 }

@@ -390,7 +390,8 @@ export default function MCPButton({ service, onServiceChange }: MCPButtonProps) 
           // Toggle tool panel visibility
           setIsOpen(!isOpen)
         }}
-        title={`${service.name} MCP Server`}
+        title={`Source: ${service.name}`}
+        aria-label={`Source: ${service.name}`}
         data-mcp-button={service.name}
         style={{
           position: 'relative',
@@ -445,48 +446,31 @@ export default function MCPButton({ service, onServiceChange }: MCPButtonProps) 
             objectFit: 'contain'
           }}
         />
-        {/* Status Badge */}
-        {connectionStatus === 'disconnected' ? (
-          // Show red exclamation mark when connection fails
+        {/* Minimal corner status dot */}
+        {connectionStatus === 'connected' && (
           <div style={{
             position: 'absolute',
-            top: '-2px',
-            right: '-2px',
-            width: '16px',
-            height: '16px',
-            borderRadius: '50%',
-            background: '#ef4444',
-            border: '2px solid rgba(20, 20, 20, 0.9)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '11px',
-            fontWeight: '700',
-            color: '#0a0a0a'
-          }}>
-            !
-          </div>
-        ) : service.enabled && service.tools.filter(tool => tool.enabled).length > 0 && connectionStatus === 'connected' ? (
-          // Show green number when connected and has enabled tools
-          <div style={{
-            position: 'absolute',
-            top: '-2px',
-            right: '-2px',
-            width: '16px',
-            height: '16px',
+            top: '1px',
+            right: '1px',
+            width: '7px',
+            height: '7px',
             borderRadius: '50%',
             background: '#4ade80',
-            border: '2px solid rgba(20, 20, 20, 0.9)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '10px',
-            fontWeight: '700',
-            color: '#0a0a0a'
-          }}>
-            {service.tools.filter(tool => tool.enabled).length}
-          </div>
-        ) : null}
+            boxShadow: '0 0 0 1.5px rgba(20, 20, 20, 0.9)'
+          }} />
+        )}
+        {connectionStatus === 'disconnected' && (
+          <div style={{
+            position: 'absolute',
+            top: '1px',
+            right: '1px',
+            width: '7px',
+            height: '7px',
+            borderRadius: '50%',
+            background: '#ef4444',
+            boxShadow: '0 0 0 1.5px rgba(20, 20, 20, 0.9)'
+          }} />
+        )}
       </button>
     </div>
   )

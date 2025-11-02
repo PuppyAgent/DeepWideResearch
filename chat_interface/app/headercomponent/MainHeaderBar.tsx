@@ -1,6 +1,7 @@
 'use client'
 
 import React from 'react'
+import type { Session } from '../context/SessionContext'
 import { HistoryToggleButton } from './ChatHistoryButton'
 import NewChatButton from './NewChatButton'
 import SessionsOverlay from './ChatHistoryButton'
@@ -12,7 +13,7 @@ export interface MainHeaderBarProps {
   isCreatingSession: boolean
   showCreateSuccess: boolean
   onCreateNewChat: () => void
-  sessions: any[]
+  sessions: Session[]
   currentSessionId?: string | null
   isLoadingSessions: boolean
   onSessionClick: (id: string) => void

@@ -130,18 +130,7 @@ export default function NewChatLanding({
             marginBottom:"48px",
             whiteSpace: 'nowrap'
           }}>
-            <div style={{ fontSize: '20px', fontWeight: 700, color: '#e5e5e5', whiteSpace: 'pre' }}>{brandTextDisplayed}</div>
-            <img 
-              src="/SimpleDWlogo.svg" 
-              alt="Deep Wide Research" 
-              width={48} 
-              height={48} 
-              style={{ 
-                opacity: logoEntered ? 0.95 : 0,
-                transform: logoEntered ? 'translateX(0)' : 'translateX(32px)',
-                transition: 'transform 0.35s ease-out, opacity 0.35s ease-out'
-              }} 
-            />
+            <div style={{ fontSize: '20px', fontWeight: 600, color: '#e5e5e5', whiteSpace: 'pre' }}>{brandTextDisplayed}</div>
           </div>
           {/* Settings row (MCP only) */}
           <div style={{
@@ -150,7 +139,7 @@ export default function NewChatLanding({
             margin: '0 auto',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
+            justifyContent: 'flex-start',
             gap: '8px',
             paddingLeft: '32px',
             paddingRight: '32px',
@@ -220,7 +209,7 @@ export default function NewChatLanding({
                 data-deepwide-inline-trigger
                 onMouseEnter={() => setIsDeepWideHover(true)}
                 onMouseLeave={() => setIsDeepWideHover(false)}
-                style={{ fontSize: '12px', color: isDeepWideHover ? '#e5e5e5' : '#888', fontFamily: 'inherit, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', lineHeight: '1.5', whiteSpace: 'pre', cursor: 'ew-resize', userSelect: 'none', transition: 'color 150ms ease, background 150ms ease', paddingLeft: '8px', paddingRight: '8px', paddingTop: '6px', paddingBottom: '6px', borderRadius: '8px', background: isDeepWideHover ? 'rgba(255,255,255,0.04)' : 'transparent', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}
+                style={{ fontSize: '12px', color: isDeepWideHover ? '#e5e5e5' : '#888', fontFamily: 'inherit, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', lineHeight: '1.25', whiteSpace: 'pre', cursor: 'ew-resize', userSelect: 'none', transition: 'color 150ms ease, background 150ms ease', paddingLeft: '8px', paddingRight: '8px', paddingTop: '2px', paddingBottom: '2px', borderRadius: '8px', background: isDeepWideHover ? 'rgba(255,255,255,0.04)' : 'transparent', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}
                 title="Adjust Deep × Wide"
               >
                 <div
@@ -235,15 +224,15 @@ export default function NewChatLanding({
                     const next = (stepIndex + 1) / STEPS
                     onResearchParamsChange({ deep: next, wide: researchParams.wide })
                   }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 0', borderRadius: '6px', cursor: 'inherit' }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '2px', padding: 0, borderRadius: '6px', cursor: 'inherit' }}
                 >
-                  <span style={{ fontFamily: 'inherit', fontWeight: 400 }}>DEEP:</span>
-                  <span style={{ margin: '0 6px' }} />
+                  <span style={{ fontFamily: 'inherit', fontWeight: 400 }}>DEEP</span>
+                  <span style={{ margin: '0 2px' }} />
                   <span ref={deepBlocksRef} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>
                     {makeBlocks(researchParams.deep)}
                   </span>
                   <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', display: 'inline-block', width: '4ch', textAlign: 'right' }}>{Math.round(researchParams.deep * 100)}%</span>
-                  <div style={{ display: 'flex', gap: '4px', opacity: isDeepWideHover ? 1 : 0, transition: 'opacity 150ms ease', marginLeft: '6px' }}>
+                  <div style={{ display: 'flex', gap: '4px', opacity: isDeepWideHover ? 1 : 0, transition: 'opacity 150ms ease', marginLeft: '2px' }}>
                     <button
                       type="button"
                       title="Decrease depth"
@@ -253,7 +242,7 @@ export default function NewChatLanding({
                         const next = Math.max(step, Math.round((researchParams.deep - step) / step) * step)
                         onResearchParamsChange({ deep: next, wide: researchParams.wide })
                       }}
-                      style={{ width: '18px', height: '18px', borderRadius: '9px', border: 'none', background: 'transparent', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
+                      style={{ width: '16px', height: '16px', borderRadius: '8px', border: 'none', background: 'transparent', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
                       onMouseEnter={(e) => { e.currentTarget.style.color = '#e6e6e6' }}
                       onMouseLeave={(e) => { e.currentTarget.style.color = '#888' }}
                     >
@@ -270,7 +259,7 @@ export default function NewChatLanding({
                         const next = Math.min(1, Math.round((researchParams.deep + step) / step) * step)
                         onResearchParamsChange({ deep: next, wide: researchParams.wide })
                       }}
-                      style={{ width: '18px', height: '18px', borderRadius: '9px', border: 'none', background: 'transparent', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
+                      style={{ width: '16px', height: '16px', borderRadius: '8px', border: 'none', background: 'transparent', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
                       onMouseEnter={(e) => { e.currentTarget.style.color = '#e6e6e6' }}
                       onMouseLeave={(e) => { e.currentTarget.style.color = '#888' }}
                     >
@@ -281,7 +270,7 @@ export default function NewChatLanding({
                   </div>
                 </div>
                 <div
-                  style={{ marginTop: '1px', display: 'flex', alignItems: 'center', gap: '6px', padding: '2px 0', borderRadius: '6px', cursor: 'inherit' }}
+                  style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '2px', padding: 0, borderRadius: '6px', cursor: 'inherit' }}
                   onClick={(e) => {
                     const targetSpan = wideBlocksRef.current
                     if (!targetSpan) return
@@ -294,13 +283,13 @@ export default function NewChatLanding({
                     onResearchParamsChange({ deep: researchParams.deep, wide: next })
                   }}
                 >
-                  <span style={{ fontFamily: 'inherit', fontWeight: 400 }}>WIDE:</span>
-                  <span style={{ margin: '0 6px' }} />
+                  <span style={{ fontFamily: 'inherit', fontWeight: 400 }}>WIDE</span>
+                  <span style={{ margin: '0 2px' }} />
                   <span ref={wideBlocksRef} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>
                     {makeBlocks(researchParams.wide)}
                   </span>
                   <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', display: 'inline-block', width: '4ch', textAlign: 'right' }}>{Math.round(researchParams.wide * 100)}%</span>
-                  <div style={{ display: 'flex', gap: '4px', opacity: isDeepWideHover ? 1 : 0, transition: 'opacity 150ms ease', marginLeft: '6px' }}>
+                  <div style={{ display: 'flex', gap: '4px', opacity: isDeepWideHover ? 1 : 0, transition: 'opacity 150ms ease', marginLeft: '2px' }}>
                     <button
                       type="button"
                       title="Decrease width"
@@ -310,7 +299,7 @@ export default function NewChatLanding({
                         const next = Math.max(step, Math.round((researchParams.wide - step) / step) * step)
                         onResearchParamsChange({ deep: researchParams.deep, wide: next })
                       }}
-                      style={{ width: '18px', height: '18px', borderRadius: '9px', border: 'none', background: 'transparent', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
+                      style={{ width: '16px', height: '16px', borderRadius: '8px', border: 'none', background: 'transparent', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
                       onMouseEnter={(e) => { e.currentTarget.style.color = '#e6e6e6' }}
                       onMouseLeave={(e) => { e.currentTarget.style.color = '#888' }}
                     >
@@ -327,7 +316,7 @@ export default function NewChatLanding({
                         const next = Math.min(1, Math.round((researchParams.wide + step) / step) * step)
                         onResearchParamsChange({ deep: researchParams.deep, wide: next })
                       }}
-                      style={{ width: '18px', height: '18px', borderRadius: '9px', border: 'none', background: 'transparent', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
+                      style={{ width: '16px', height: '16px', borderRadius: '8px', border: 'none', background: 'transparent', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
                       onMouseEnter={(e) => { e.currentTarget.style.color = '#e6e6e6' }}
                       onMouseLeave={(e) => { e.currentTarget.style.color = '#888' }}
                     >
@@ -371,6 +360,16 @@ export default function NewChatLanding({
             </button>
             </div>
           </div>
+          {/* Visual spacer to nudge input upward in overall centering */}
+          <div
+            aria-hidden="true"
+            style={{
+              width: '100%',
+              maxWidth: '720px',
+              margin: '0 auto',
+              height: '28px'
+            }}
+          />
 
           {/* Subtle suggestions are provided via rotating placeholder and Tab acceptance; no visible chips */}
         </div>

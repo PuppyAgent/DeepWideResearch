@@ -3,7 +3,6 @@
 import { useState, useRef, useEffect } from 'react'
 import BotMessage from './BotMessage'
 import UserMessage from './UserMessage'
-import './puppychat.module.css'
 // NOTE: do not import app-level UI into SDK component
 
 // Export Message interface
@@ -258,7 +257,7 @@ export default function ChatInterface({
       overscrollBehavior: 'contain' as const
     },
     toolbarContainer: {
-      padding: '20px 8px'
+      padding: '8px 32px 0 32px'
     }
   }
 

@@ -2,11 +2,12 @@
 
 import React from 'react'
 import type { Message as UIMessage } from '../../components/component/ChatInterface'
+import type { ChatMessage } from '../context/SessionContext'
 
 // chatHistory: { [sessionId]: Array<{ role: 'user'|'assistant'|'system'; content: string; timestamp?: number }> }
 // sessionStreamingCache: { [sessionId]: string[] }
 export function useUiMessages(
-  chatHistory: Record<string, any[]>,
+  chatHistory: Record<string, ChatMessage[]>,
   currentSessionId: string | null | undefined,
   sessionStreamingCache: Record<string, string[]>
 ): UIMessage[] {
@@ -24,7 +25,7 @@ export function useUiMessages(
       }
     }
 
-    const result: UIMessage[] = currentMessages.map((m: any, idx: number) => {
+    const result: UIMessage[] = currentMessages.map((m: ChatMessage, idx: number) => {
       const baseMessage: UIMessage = {
         id: `${m?.timestamp ?? idx}-${idx}`,
         content: m?.content ?? '',

@@ -207,7 +207,7 @@ export default function Home() {
   }, [isSidebarMenuOpen])
 
   // Map messages from Context to UI messages via hook (keeps this file lean)
-  const uiMessages: UIMessage[] = useUiMessages(chatHistory as any, currentSessionId, sessionStreamingCache)
+  const uiMessages: UIMessage[] = useUiMessages(chatHistory, currentSessionId, sessionStreamingCache)
 
   // Decide whether to show a splash (logo) while chat history is loading/preparing
   const hasSession = !!currentSessionId
