@@ -9,7 +9,7 @@ import DevModePanel from './headercomponent/DevModeButton'
 import MainHeaderBar from './headercomponent/MainHeaderBar'
 import { useRouter } from 'next/navigation'
 import { useSession } from './context/SessionContext'
-import type { Message as UIMessage } from '../components/component/ChatInterface'
+import type { Message as UIMessage } from '../components/ChatMain'
 import { useUiMessages } from './hooks/useUiMessages'
  
 
@@ -24,6 +24,7 @@ interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
   content: string
   timestamp?: number
+  actionList?: string[]
 }
 
 export default function Home() {
@@ -49,7 +50,8 @@ export default function Home() {
     switchSession,
     deleteSession,
     addMessage,
-    saveSessionToBackend
+    saveSessionToBackend,
+    updateMessages
   } = useSession()
 
   // UI state
@@ -288,7 +290,20 @@ export default function Home() {
       // ✅ Immediately add user message to Context (UI updates immediately)
       addMessage(targetSessionId, userMessage)
 
-      // Construct request data
+      // Prepare assistant placeholder to update in-place during streaming
+      const assistantTimestamp = Date.now()
+      let assistantMessage: ChatMessage = { role: 'assistant', content: '', timestamp: assistantTimestamp, actionList: [] }
+      // Show assistant placeholder immediately in UI
+      addMessage(targetSessionId!, assistantMessage)
+      let workingHistory: ChatMessage[] = [...localHistoryBefore, assistantMessage]
+
+      // Construct request data (strip UI-only fields like actionList before sending)
+      const sanitizedHistory = localHistoryBefore.map((m) => ({
+        role: m.role,
+        content: m.content,
+        timestamp: m.timestamp
+      }))
+      
       const requestData = {
         message: {
           query: message,
@@ -311,7 +326,7 @@ export default function Home() {
               return acc
             }, {} as Record<string, string[]>)
         },
-        history: localHistoryBefore  // Send conversation history with latest user message
+        history: sanitizedHistory  // Send conversation history without UI-only fields
       }
 
       console.log('🚀 Sending streaming request to backend:', message)
@@ -319,8 +334,6 @@ export default function Home() {
       // Call streaming API - use environment variable or default local address
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
       const token = await getAccessToken()
-      // Pre-emit connecting state to unblock UI immediately
-      onStreamUpdate?.('Connecting…', true, [])
       const response = await fetch(`${apiUrl}/api/research`, {
         method: 'POST',
         headers: {
@@ -367,6 +380,10 @@ export default function Home() {
                 finalReport = data.final_report
                 onStreamUpdate?.(finalReport, false, statusHistory) // 传递完整历史
                 isGeneratingReport = false
+                // Update assistant message with final content and full actionList
+                assistantMessage = { ...assistantMessage, content: finalReport, actionList: statusHistory.length > 0 ? [...statusHistory] : undefined }
+                workingHistory = [...localHistoryBefore, assistantMessage]
+                updateMessages(targetSessionId!, workingHistory)
               } else if (data.action === 'report_chunk') {
                 // Streaming report content
                 finalReport = data.accumulated_report
@@ -374,12 +391,20 @@ export default function Home() {
                   isGeneratingReport = true
                 }
                 onStreamUpdate?.(finalReport, true, statusHistory) // Stream the accumulated report
+                // Update assistant content and (if any) actionList
+                assistantMessage = { ...assistantMessage, content: finalReport, actionList: statusHistory.length > 0 ? [...statusHistory] : assistantMessage.actionList }
+                workingHistory = [...localHistoryBefore, assistantMessage]
+                updateMessages(targetSessionId!, workingHistory)
               } else if (data.message) {
                 statusHistory.push(data.message) // 👈 追加到历史，不覆盖
                 // Only update streaming status if not currently generating report
                 if (!isGeneratingReport) {
                   onStreamUpdate?.(data.message, true, statusHistory) // 传递当前消息和完整历史
                 }
+                // Reflect latest step into assistant actionList only; content should only show backend report chunks
+                assistantMessage = { ...assistantMessage, actionList: [...statusHistory] }
+                workingHistory = [...localHistoryBefore, assistantMessage]
+                updateMessages(targetSessionId!, workingHistory)
               }
             } catch (e) {
               console.warn('Failed to parse SSE data:', line)
@@ -388,10 +413,6 @@ export default function Home() {
         }
       }
 
-      // ✅ Add assistant reply to Context
-      const assistantMessage: ChatMessage = { role: 'assistant', content: finalReport || statusHistory[statusHistory.length - 1] || '', timestamp: Date.now() }
-      addMessage(targetSessionId, assistantMessage)
-      
       // 📜 Cache the streaming history for this session
       if (statusHistory.length > 0) {
         setSessionStreamingCache(prev => ({
@@ -402,7 +423,7 @@ export default function Home() {
       }
       
       // ✅ Save to backend
-      const completeHistory = [...localHistoryBefore, assistantMessage]
+      const completeHistory = workingHistory
       await saveSessionToBackend(targetSessionId, completeHistory)
       
       // 🔑 If promoted from temporary session, now safe to update chatComponentKey
@@ -551,8 +572,6 @@ export default function Home() {
                   initialMessages={uiMessages.length > 0 ? uiMessages : undefined}
                   onSendMessage={handleSendMessage}
                   placeholder="Ask anything about your research topic..."
-                  welcomeMessage="Welcome to Deep & Wide Research! I'm your AI research assistant ready to conduct comprehensive research and provide detailed insights. What would you like to explore today?"
-                  messagesMaxWidth="900px"
                   researchParams={researchParams}
                   onResearchParamsChange={setResearchParams}
                   mcpConfig={mcpConfig}

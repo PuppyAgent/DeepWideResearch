@@ -13,7 +13,6 @@ export interface NewChatLandingProps {
   onSendMessage?: (message: string, onStreamUpdate?: (content: string, isStreaming?: boolean, statusHistory?: string[]) => void) => Promise<string> | string
   externalIsTyping?: boolean
   externalIsStreaming?: boolean
-  messagesMaxWidth?: number | string
 }
 
 export default function NewChatLanding({
@@ -26,7 +25,6 @@ export default function NewChatLanding({
   onSendMessage,
   externalIsTyping,
   externalIsStreaming,
-  messagesMaxWidth = '900px'
 }: NewChatLandingProps) {
   const [inputValue, setInputValue] = React.useState('')
   const [isFocused, setIsFocused] = React.useState(false)
@@ -117,9 +115,9 @@ export default function NewChatLanding({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '24px'
+        padding: '24px',
       }}>
-        <div style={{ width: '100%', maxWidth: messagesMaxWidth, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {/* Brand header */}
           <div style={{
             width: '100%',
@@ -128,9 +126,10 @@ export default function NewChatLanding({
             justifyContent: 'center',
             gap: '12px',
             marginBottom:"48px",
+            height: '32px',
             whiteSpace: 'nowrap'
           }}>
-            <div style={{ fontSize: '20px', fontWeight: 600, color: '#e5e5e5', whiteSpace: 'pre' }}>{brandTextDisplayed}</div>
+            <div style={{ fontSize: '20px', lineHeight: '32px', fontWeight: 600, color: '#e5e5e5', whiteSpace: 'pre' }}>{brandTextDisplayed}</div>
           </div>
           {/* Settings row (MCP only) */}
           <div style={{

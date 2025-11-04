@@ -1,20 +1,9 @@
 import { Copy, Check } from 'lucide-react'
-import { CSSProperties, useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import MarkdownRenderer from './MarkdownRenderer'
 import type { Message } from '../types'
 
-const StyleManager = {
-  injected: new Set<string>(),
-  inject(id: string, css: string) {
-    if (typeof document === 'undefined') return
-    if (this.injected.has(id)) return
-    const style = document.createElement('style')
-    style.id = id
-    style.textContent = css
-    document.head.appendChild(style)
-    this.injected.add(id)
-  }
-}
+// Runtime CSS injection removed; animations and tooltip styles live in globals.css
 
 export type ActionStepStatus = 'pending' | 'running' | 'completed' | 'error'
 
@@ -26,13 +15,10 @@ export interface ActionStep {
 
 export interface BotMessageProps {
   message: Message
-  isTyping?: boolean
   actionSteps?: ActionStep[]
-  responseContent?: string
-  isStreamingResponse?: boolean
 }
 
-export default function BotMessage({ message, isTyping = false, actionSteps, responseContent, isStreamingResponse }: BotMessageProps) {
+export default function BotMessage({ message, actionSteps }: BotMessageProps) {
   const [isHovered, setIsHovered] = useState(false)
   const [copied, setCopied] = useState(false)
   const [hoveredUrl, setHoveredUrl] = useState<string | null>(null)
@@ -58,75 +44,13 @@ export default function BotMessage({ message, isTyping = false, actionSteps, res
     }
   }, [hoveredUrl])
 
-  useEffect(() => {
-    StyleManager.inject('puppychat-animations', `
-      @keyframes pulse {
-        0%, 80%, 100% { transform: scale(0.8); opacity: 0.5; }
-        40% { transform: scale(1); opacity: 1; }
-      }
-      @keyframes textFlash {
-        0% { background-position: 100% 0; }
-        100% { background-position: -100% 0; }
-      }
-      @keyframes fadeInOut {
-        0%, 100% { opacity: 0.8; }
-        50% { opacity: 1; }
-      }
-      @keyframes breathe {
-        0%, 100% { transform: scale(1); opacity: 0.6; }
-        50% { transform: scale(1.3); opacity: 1; }
-      }
-    `)
-    
-    // Inject tooltip styles
-    StyleManager.inject('citation-styles', `
-      .link-tooltip {
-        position: fixed;
-        z-index: 10000;
-        background: #1a1a1a;
-        border: 1px solid #3a3a3a;
-        border-radius: 8px;
-        padding: 10px 12px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
-        pointer-events: none;
-        max-width: 400px;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-      .link-tooltip .favicon {
-        width: 20px;
-        height: 20px;
-        flex-shrink: 0;
-        border-radius: 4px;
-      }
-      .link-tooltip .url-text {
-        font-size: 13px;
-        color: #d2d2d2;
-        word-break: break-all;
-        line-height: 1.4;
-        flex: 1;
-      }
-    `)
-  }, [])
+  // No-op: CSS is provided via globals.css
 
   const handleCopy = async () => {
     try {
-      const copyPayload = (responseContent ?? message.content) || ''
+      const copyPayload = message.content || ''
       if (!copyPayload) return
-      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(copyPayload)
-      } else if (typeof document !== 'undefined') {
-        const textarea = document.createElement('textarea')
-        textarea.value = copyPayload
-        textarea.style.position = 'fixed'
-        textarea.style.left = '-9999px'
-        document.body.appendChild(textarea)
-        textarea.focus()
-        textarea.select()
-        document.execCommand('copy')
-        document.body.removeChild(textarea)
-      }
+      await navigator.clipboard.writeText(copyPayload)
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     } catch {}
@@ -157,135 +81,38 @@ export default function BotMessage({ message, isTyping = false, actionSteps, res
     }
   }
 
-  const styles: { [key: string]: CSSProperties } = {
-    container: { 
-      display: 'flex', 
-      flexDirection: 'column',  // 改为垂直布局
-      alignItems: 'flex-start', 
-      gap: '0px', 
-      width: '100%'
-    },
-    messageWrapper: { 
-      display: 'flex', 
-      flexDirection: 'column', 
-      alignItems: 'flex-start', 
-      width: '100%', 
-      minWidth: 0,
-      padding: '16px 20px',
-      borderRadius: '16px',
-      border: '1px solid rgba(255, 255, 255, 0.05)'  // 非常浅的边框，几乎看不见
-    },
-    content: { fontSize: '16px', color: '#d2d2d2', whiteSpace: 'normal', lineHeight: '1.6', margin: 0, textAlign: 'left', wordBreak: 'break-word', overflowWrap: 'break-word', width: '100%' },
-    h1: { fontSize: '24px', fontWeight: 700, lineHeight: '1.6', margin: '32px 0 16px 0' },
-    h2: { fontSize: '20px', fontWeight: 700, lineHeight: '1.6', margin: '24px 0 12px 0' },
-    h3: { fontSize: '17px', fontWeight: 600, lineHeight: '1.6', margin: '16px 0 8px 0' },
-    link: {
-      color: '#4a90e2',
-      textDecoration: 'underline',
-      textDecorationColor: '#4a90e2',
-      transition: 'all 0.2s ease',
-      cursor: 'pointer',
-      fontWeight: 500,
-      wordBreak: 'break-word' as const,
-      overflowWrap: 'break-word' as const,
-      display: 'inline',
-      maxWidth: '100%'
-    },
-    table: { 
-      borderCollapse: 'collapse', 
-      width: '100%', 
-      margin: '12px 0', 
-      fontSize: '14px', 
-      border: '1px solid #3a3a3a',
-      backgroundColor: '#1a1a1a',
-      borderRadius: '6px',
-      overflow: 'hidden'
-    },
-    thead: { backgroundColor: '#2a2a2a' },
-    th: { 
-      padding: '10px 12px', 
-      textAlign: 'left', 
-      borderBottom: '2px solid #3a3a3a', 
-      borderRight: '1px solid #3a3a3a',
-      fontWeight: 600, 
-      color: '#e0e0e0',
-      backgroundColor: '#2a2a2a'
-    },
-    td: { 
-      padding: '8px 12px', 
-      borderBottom: '1px solid #2a2a2a', 
-      borderRight: '1px solid #2a2a2a',
-      color: '#d2d2d2',
-      verticalAlign: 'top'
-    },
-    tr: { 
-      borderBottom: '1px solid #2a2a2a'
-    },
-    metaBar: { 
-      display: 'flex', 
-      alignItems: 'center', 
-      gap: '8px', 
-      marginTop: '6px',  // 在消息框下方留一点间距
-      marginLeft: '4px',  // 稍微缩进对齐
-      opacity: isHovered ? 0.6 : 0, 
-      transition: 'opacity 0.2s ease', 
-      justifyContent: 'flex-start' 
-    },
-    timestamp: { fontSize: '14px', color: '#a0a0a0' },
-    copyButton: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', borderRadius: '4px', color: '#a0a0a0', cursor: 'pointer' },
-    typingDots: { display: 'flex', alignItems: 'center', gap: '8px', height: '20px' },
-    dot: { width: '8px', height: '8px', backgroundColor: '#4a90e2', borderRadius: '50%', animation: 'pulse 1s infinite' },
-    reportStreaming: {
-      fontSize: '16px',
-      color: '#d2d2d2',
-      lineHeight: '1.6',
-      whiteSpace: 'normal',
-      transition: 'opacity 0.3s ease-in-out',
-      wordBreak: 'break-word',
-      overflowWrap: 'break-word',
-      width: '100%'
-    }
-  }
+// styles object removed; inline styles are used directly below
 
   // 极简：仅使用显式 props
   const resolvedActionSteps: ActionStep[] = Array.isArray(actionSteps) ? actionSteps : []
-  const contentToRender = (typeof responseContent === 'string' ? responseContent : message.content) || ''
+  const contentToRender = message.content || ''
   const shouldShowContent = contentToRender.length > 0
-  const isReportStreaming = Boolean(isStreamingResponse)
 
   return (
     <div 
-      style={styles.container}
+      style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0px', width: '100%' }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <div style={styles.messageWrapper}>
-        {isTyping ? (
-          <div style={{
-            height: '20px'
-          }}>
-          </div>
-        ) : (
-          <>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%', minWidth: 0, padding: '16px 20px', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
+        <>
             {/* 📜 执行步骤记录 - 时间线样式 */}
             {resolvedActionSteps.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '12px', width: '100%' }}>
                 {resolvedActionSteps.map((step, index) => {
                   const isLastItem = index === resolvedActionSteps.length - 1
                   const status: ActionStepStatus | undefined = step.status
-                  const isCompleted = status
-                    ? status === 'completed'
-                    : !(isReportStreaming && isLastItem)
-                  const isRunning = status ? status === 'running' : (isReportStreaming && isLastItem)
-                  const isPending = status ? status === 'pending' : false
-                  const isError = status ? status === 'error' : false
+                  const isCompleted = status === 'completed'
+                  const isRunning = status === 'running'
+                  const isPending = status === 'pending'
+                  const isError = status === 'error'
                   return (
                     <div 
                       key={step.id ?? `action-step-${index}`}
                       style={{
                         display: 'flex',
                         alignItems: 'flex-start',
-                        gap: '12px',
+                        gap: '8px',
                         position: 'relative'
                       }}
                     >
@@ -296,12 +123,12 @@ export default function BotMessage({ message, isTyping = false, actionSteps, res
                         alignItems: 'center',
                         flexShrink: 0,
                         position: 'relative',
-                        paddingTop: '5px'
+                        paddingTop: '7px'
                       }}>
                         {/* 圆点 */}
                         <div style={{
-                          width: '14px',
-                          height: '14px',
+                          width: '10px',
+                          height: '10px',
                           borderRadius: '50%',
                           backgroundColor: isCompleted ? '#888' : (isError ? 'rgba(255, 107, 107, 0.35)' : 'transparent'), // 实心灰色 vs 空心灰色
                           border: isCompleted ? 'none' : (isError ? '2px solid #ff6b6b' : (isRunning ? '2px solid #888' : '2px solid #888')),
@@ -315,10 +142,10 @@ export default function BotMessage({ message, isTyping = false, actionSteps, res
                         {!isLastItem && (
                           <div style={{
                             width: '2px',
-                            height: '20px',
+                            height: '16px',
                             backgroundColor: '#666',
                             opacity: 0.4,
-                            marginTop: '2px'
+                            marginTop: '6px'
                           }} />
                         )}
                       </div>
@@ -328,12 +155,13 @@ export default function BotMessage({ message, isTyping = false, actionSteps, res
                         style={{
                           fontSize: '14px',
                           color: 'transparent',
+                          WebkitTextFillColor: 'transparent',
                           padding: 0,
                           backgroundImage: isError
                             ? 'linear-gradient(90deg, #ff7b7b 0%, #ff9b9b 100%)'
                             : isCompleted
-                              ? 'linear-gradient(90deg, #999 0%, #999 100%)' // 已完成：静态浅灰色
-                              : 'linear-gradient(90deg, #888 0%, #888 30%, #fff 50%, #888 70%, #888 100%)', // 进行中：滚动渐变
+                              ? 'linear-gradient(90deg, #999 0%, #999 100%)'
+                              : 'linear-gradient(90deg, #888 0%, #888 48%, #fff 50%, #888 52%, #888 100%)',
                           backgroundClip: 'text',
                           WebkitBackgroundClip: 'text',
                           backgroundSize: isRunning ? '200% 100%' : '100% 100%',
@@ -352,26 +180,11 @@ export default function BotMessage({ message, isTyping = false, actionSteps, res
               </div>
             )}
             
-            {/* Message content - with or without report streaming */}
+            {/* Message content */}
             {shouldShowContent && (
-              <div style={isReportStreaming ? styles.reportStreaming : styles.content}>
+              <div style={{ fontSize: '16px', color: '#d2d2d2', whiteSpace: 'normal', lineHeight: '1.6', margin: 0, textAlign: 'left', wordBreak: 'break-word', overflowWrap: 'break-word', width: '100%' }}>
                 <MarkdownRenderer
                   content={(contentToRender || '').replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n')}
-                  componentsStyle={{
-                    p: { margin: '12px 0', lineHeight: '1.6', wordBreak: 'break-word', overflowWrap: 'break-word' },
-                    h1: styles.h1,
-                    h2: styles.h2,
-                    h3: styles.h3,
-                    ul: { margin: '8px 0', paddingLeft: '20px' },
-                    ol: { margin: '8px 0', paddingLeft: '20px' },
-                    li: { margin: '4px 0' },
-                    link: styles.link,
-                    table: styles.table,
-                    thead: styles.thead,
-                    tr: styles.tr,
-                    th: styles.th,
-                    td: styles.td,
-                  }}
                   onLinkEnter={(href, e) => { e.stopPropagation(); handleLinkHover(href, e) }}
                   onLinkLeave={(e) => { e.stopPropagation(); handleLinkLeave() }}
                   onLinkMove={(href, e) => {
@@ -387,35 +200,24 @@ export default function BotMessage({ message, isTyping = false, actionSteps, res
               </div>
             )}
 
-            {/* Fallback: minimal typing indicator when no actions and no content */}
-            {resolvedActionSteps.length === 0 && !shouldShowContent && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '20px' }}>
-                <div style={{ width: '8px', height: '8px', backgroundColor: '#4a90e2', borderRadius: '50%', animation: 'pulse 1s infinite' }} />
-                <div style={{ width: '8px', height: '8px', backgroundColor: '#4a90e2', borderRadius: '50%', animation: 'pulse 1s infinite', animationDelay: '150ms' }} />
-                <div style={{ width: '8px', height: '8px', backgroundColor: '#4a90e2', borderRadius: '50%', animation: 'pulse 1s infinite', animationDelay: '300ms' }} />
-              </div>
-            )}
           </>
-        )}
       </div>
 
       {/* Meta bar - 时间戳和复制按钮显示在消息框外面 */}
-      {!isTyping && (
-        <div style={styles.metaBar}>
-          <div style={styles.timestamp}>
-            {message.timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-          </div>
-          <div style={styles.copyButton} title={copied ? 'Copied' : 'Copy message'} onClick={handleCopy}>
-            {copied ? (
-              <div style={{ width: '18px', height: '18px', borderRadius: '50%', backgroundColor: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <Check style={{ width: '12px', height: '12px', color: '#000000' }} />
-              </div>
-            ) : (
-              <Copy style={{ width: '14px', height: '14px' }} />
-            )}
-          </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', marginLeft: '4px', opacity: isHovered ? 0.6 : 0, transition: 'opacity 0.2s ease', justifyContent: 'flex-start' }}>
+        <div style={{ fontSize: '14px', color: '#a0a0a0' }}>
+          {message.timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
         </div>
-      )}
+        <div style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', borderRadius: '4px', color: '#a0a0a0', cursor: 'pointer' }} title={copied ? 'Copied' : 'Copy message'} onClick={handleCopy}>
+          {copied ? (
+            <div style={{ width: '18px', height: '18px', borderRadius: '50%', backgroundColor: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Check style={{ width: '12px', height: '12px', color: '#000000' }} />
+            </div>
+          ) : (
+            <Copy style={{ width: '14px', height: '14px' }} />
+          )}
+        </div>
+      </div>
 
       {/* Link Tooltip */}
       {hoveredUrl && (

@@ -66,6 +66,62 @@ class Configuration:
         self.final_report_model_max_tokens = int(os.getenv("FINAL_REPORT_MODEL_MAX_TOKENS", "128000"))
         self.mcp_prompt = None
 
+MODEL_GRID = [
+    # deep = 0.25
+    [
+        ("openai/gpt-4.1", "openai/gpt-4.1"),   # wide = 0.25
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.5
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.75
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 1.0
+    ],
+    # deep = 0.5
+    [
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.25
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.5
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.75
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 1.0
+    ],
+    # deep = 0.75
+    [
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.25
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.5
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.75
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 1.0
+    ],
+    # deep = 1.0
+    [
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.25
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.5
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.75
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 1.0
+    ],
+]
+
+
+def _index_for_param(x: float) -> int:
+    """Map a float in [0,1] to index {0,1,2,3} using simple thresholds."""
+    try:
+        v = float(x)
+    except Exception:
+        v = 0.5
+    if v < 0.25:
+        return 0
+    if v < 0.5:
+        return 0  # <0.5 → 0.25 bucket
+    if v < 0.75:
+        return 1  # [0.5,0.75) → 0.5 bucket
+    if v < 1.0:
+        return 2  # [0.75,1.0) → 0.75 bucket
+    return 3       # >=1.0 → 1.0 bucket
+
+
+def _apply_model_mapping_to_cfg(cfg: Configuration, deep_param: float, wide_param: float) -> None:
+    di = _index_for_param(deep_param)
+    wi = _index_for_param(wide_param)
+    research_model, final_model = MODEL_GRID[di][wi]
+    cfg.research_model = research_model
+    cfg.final_report_model = final_model
+
 
 async def run_deep_research_stream(user_messages: List[str], cfg: Optional[Configuration] = None, api_keys: Optional[dict] = None, mcp_config: Optional[Dict[str, List[str]]] = None, deep_param: float = 0.5, wide_param: float = 0.5):
     """Streaming version of the deep research flow: Research → Generate
@@ -74,6 +130,11 @@ async def run_deep_research_stream(user_messages: List[str], cfg: Optional[Confi
         Status update dictionaries containing 'action' and 'message' fields
     """
     cfg = cfg or Configuration()
+    # Dynamically select models based on deep & wide from frontend
+    _apply_model_mapping_to_cfg(cfg, deep_param, wide_param)
+    # Print selected models before any OpenRouter requests
+    print(f"[DeepWideResearch] Using OpenRouter research model: {cfg.research_model}")
+    print(f"[DeepWideResearch] Using OpenRouter final report model: {cfg.final_report_model}")
     state = {
         "messages": [{"role": "user", "content": m} for m in user_messages],
         "research_brief": None,
@@ -103,6 +164,8 @@ async def run_deep_research_stream(user_messages: List[str], cfg: Optional[Confi
         await status_queue.put(message)
     
     # Start the research task
+    # Ensure model is logged before the first OpenRouter call made inside research strategy
+    print(f"[DeepWideResearch] (pre-call) Research will use: {cfg.research_model}")
     research_task = asyncio.create_task(_run_researcher(research_topic, cfg, api_keys, mcp_config, deep_param, wide_param, status_callback))
     
     # Read and yield status updates from the queue
@@ -153,6 +216,8 @@ async def run_deep_research_stream(user_messages: List[str], cfg: Optional[Confi
             from generate_strategy import generate_report_stream
     
     # Stream the report generation
+    # Ensure model is logged before the first OpenRouter call made inside generation strategy
+    print(f"[DeepWideResearch] (pre-call) Final report will use: {cfg.final_report_model}")
     final_report_content = ""
     async for chunk in generate_report_stream(state, cfg, api_keys):
         final_report_content += chunk
@@ -197,6 +262,11 @@ async def run_deep_research(user_messages: List[str], cfg: Optional[Configuratio
         State dict containing research results and the final report
     """
     cfg = cfg or Configuration()
+    # Dynamically select models based on deep & wide from frontend
+    _apply_model_mapping_to_cfg(cfg, deep_param, wide_param)
+    # Print selected models before any OpenRouter requests
+    print(f"[DeepWideResearch] Using OpenRouter research model: {cfg.research_model}")
+    print(f"[DeepWideResearch] Using OpenRouter final report model: {cfg.final_report_model}")
     state = {
         "messages": [{"role": "user", "content": m} for m in user_messages],
         "research_brief": None,
@@ -211,6 +281,8 @@ async def run_deep_research(user_messages: List[str], cfg: Optional[Configuratio
     # ============================================================
     # Phase 1: Research - use unified_research_prompt
     # ============================================================
+    # Ensure model is logged before the first OpenRouter call made inside research strategy
+    print(f"[DeepWideResearch] (pre-call) Research will use: {cfg.research_model}")
     research = await _run_researcher(research_topic, cfg, api_keys, mcp_config, deep_param, wide_param)
     raw_notes = research.get("raw_notes", "") if research else ""
     state["notes"] = [raw_notes] if raw_notes else []
@@ -228,6 +300,8 @@ async def run_deep_research(user_messages: List[str], cfg: Optional[Configuratio
     # ============================================================
     # Phase 2: Generate - use final_report_generation_prompt
     # ============================================================
+    # Ensure model is logged before the first OpenRouter call made inside generation strategy
+    print(f"[DeepWideResearch] (pre-call) Final report will use: {cfg.final_report_model}")
     await final_report_generation(state, cfg, api_keys)
     
     # Close all MCP clients to avoid cancel-scope errors caused by different tasks closing clients

@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import type { Message as UIMessage } from '../../components/component/ChatInterface'
+import type { Message as UIMessage } from '../../components/ChatMain'
 import type { ChatMessage } from '../context/SessionContext'
 
 // chatHistory: { [sessionId]: Array<{ role: 'user'|'assistant'|'system'; content: string; timestamp?: number }> }
@@ -33,9 +33,14 @@ export function useUiMessages(
         timestamp: new Date(m?.timestamp ?? Date.now())
       }
 
-      // Attach cached streaming history to last assistant message
-      if (m?.role === 'assistant' && idx === lastAssistantIdx && cachedHistory && cachedHistory.length > 0) {
-        return { ...baseMessage, streamingHistory: cachedHistory }
+      // Prefer persisted actionList; fallback to cached streaming history for the last assistant message
+      if (m?.role === 'assistant') {
+        if (m?.actionList && m.actionList.length > 0) {
+          return { ...baseMessage, actionList: m.actionList }
+        }
+        if (idx === lastAssistantIdx && cachedHistory && cachedHistory.length > 0) {
+          return { ...baseMessage, actionList: cachedHistory }
+        }
       }
       return baseMessage
     })

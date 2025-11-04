@@ -8,6 +8,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
   content: string
   timestamp?: number
+  actionList?: string[]
 }
 
 export interface Session {
@@ -121,11 +122,27 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         content: string
         created_at: string | null
       }
-      const msgs: ChatMessage[] = (data || []).map((m: MessageRow) => ({
-        role: m.role,
-        content: m.content,
-        timestamp: m.created_at ? Date.parse(m.created_at) : undefined
-      }))
+      const unpackContent = (raw: string): { content: string; actionList?: string[] } => {
+        try {
+          const obj = JSON.parse(raw)
+          if (obj && obj.dw_format === 'v1' && typeof obj.content === 'string') {
+            const actionList = Array.isArray(obj.actionList) ? obj.actionList.filter((x: unknown) => typeof x === 'string') : undefined
+            return { content: obj.content as string, actionList }
+          }
+        } catch (_) {
+          // fall through
+        }
+        return { content: raw }
+      }
+      const msgs: ChatMessage[] = (data || []).map((m: MessageRow) => {
+        const { content, actionList } = unpackContent(m.content)
+        return {
+          role: m.role,
+          content,
+          actionList,
+          timestamp: m.created_at ? Date.parse(m.created_at) : undefined
+        }
+      })
       return msgs
     } catch (e) {
       console.error('Failed to fetch session messages:', e)
@@ -198,7 +215,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           thread_id: newId,
           user_id: authSession.user.id,
           role: m.role,
-          content: m.content,
+          content: JSON.stringify({ dw_format: 'v1', content: m.content, actionList: m.actionList && m.actionList.length > 0 ? m.actionList : undefined }),
           created_at: m.timestamp ? new Date(m.timestamp).toISOString() : undefined,
         }))
         const { error: msgErr } = await supabase.from('messages').insert(rows)
@@ -341,7 +358,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           thread_id: sessionId,
           user_id: authSession.user.id,
           role: m.role,
-          content: m.content,
+          content: JSON.stringify({ dw_format: 'v1', content: m.content, actionList: m.actionList && m.actionList.length > 0 ? m.actionList : undefined }),
           created_at: new Date(m.timestamp ?? Date.now()).toISOString(),
         }))
         await supabase.from('messages').insert(rows)

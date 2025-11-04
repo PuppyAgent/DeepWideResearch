@@ -1,16 +1,19 @@
 'use client'
 
 import React from 'react'
-import ChatInterface, { type ChatInterfaceProps } from '../components/component/ChatInterface'
-import DeepWideButton from './DeepWideButton'
+import ChatMain, { type ChatMainProps } from '../components/ChatMain'
 import MCPBar, { type McpConfigValue } from './MCPBar'
 import NewChatLanding from './NewChatLanding'
 
-export interface ChatPanelProps extends Omit<ChatInterfaceProps, 'variant' | 'aboveInput'> {
+export interface ChatPanelProps extends ChatMainProps {
   researchParams: { deep: number; wide: number }
   onResearchParamsChange: (value: { deep: number; wide: number }) => void
   mcpConfig: McpConfigValue
   onMcpConfigChange: (value: McpConfigValue) => void
+  placeholder?: string
+  disabled?: boolean
+  onSendMessage?: (message: string, onStreamUpdate?: (content: string, isStreaming?: boolean, statusHistory?: string[]) => void) => Promise<string> | string
+  style?: React.CSSProperties
 }
 
 export default function ChatPanel({
@@ -19,7 +22,6 @@ export default function ChatPanel({
   mcpConfig,
   onMcpConfigChange,
   style,
-  messagesMaxWidth = '900px',
   placeholder = 'Type your message...',
   disabled = false,
   onSendMessage,
@@ -27,10 +29,7 @@ export default function ChatPanel({
 }: ChatPanelProps) {
   const [inputValue, setInputValue] = React.useState('')
   const [isFocused, setIsFocused] = React.useState(false)
-  const [isTyping, setIsTyping] = React.useState(false)
   const [isStreaming, setIsStreaming] = React.useState(false)
-  const [streamingStatus, setStreamingStatus] = React.useState('')
-  const [streamingHistory, setStreamingHistory] = React.useState<string[]>([])
   const [hasSentFirstMessage, setHasSentFirstMessage] = React.useState(false)
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
   const [suggestionIndex, setSuggestionIndex] = React.useState(0)
@@ -50,31 +49,7 @@ export default function ChatPanel({
   }, [])
   // Wrapper for NewChatLanding: trigger streaming UI immediately on first send
   const handleLandingSend = async (text: string) => {
-    if (!text.trim() || disabled || !onSendMessage) return ''
-    setIsTyping(true)
-    setIsStreaming(true)
-    setStreamingStatus('Connecting…')
-    setStreamingHistory([])
-    if (!hasSentFirstMessage) setHasSentFirstMessage(true)
-    try {
-      const result = await onSendMessage(text, (content: string, streaming: boolean = true, statusHistory?: string[]) => {
-        if (streaming) {
-          setIsTyping(false)
-          setIsStreaming(true)
-          setStreamingStatus(content || '')
-          if (statusHistory) setStreamingHistory(statusHistory)
-        } else {
-          setIsStreaming(false)
-          setStreamingStatus(content || '')
-          if (statusHistory) setStreamingHistory(statusHistory)
-        }
-      })
-      return result
-    } finally {
-      setIsTyping(false)
-      setIsStreaming(false)
-      setStreamingStatus('')
-    }
+    return await performStreamingSend(text)
   }
 
 
@@ -91,36 +66,31 @@ export default function ChatPanel({
     if (!inputValue.trim() || disabled || !onSendMessage) return
     const current = inputValue
     setInputValue('')
-    setIsTyping(true)
-    // Show immediate placeholder while waiting for first chunk
+    await performStreamingSend(current)
+  }
+
+  const performStreamingSend = async (text: string) => {
+    if (!text.trim() || disabled || !onSendMessage) return ''
     setIsStreaming(true)
-    setStreamingStatus('Connecting…')
-    setStreamingHistory([])
     if (!hasSentFirstMessage) setHasSentFirstMessage(true)
     try {
-      await onSendMessage(current, (content: string, streaming: boolean = true, statusHistory?: string[]) => {
-        if (streaming) {
-          setIsTyping(false)
-          setIsStreaming(true)
-          setStreamingStatus(content || '')
-          if (statusHistory) setStreamingHistory(statusHistory)
-        } else {
-          setIsStreaming(false)
-          setStreamingStatus(content || '')
-          if (statusHistory) setStreamingHistory(statusHistory)
-        }
-      })
+      const result = await onSendMessage(text)
+      return result
     } finally {
-      setIsTyping(false)
       setIsStreaming(false)
-      setStreamingStatus('')
     }
   }
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
+      return
+    }
+    if (e.key === 'Tab' && !e.shiftKey && !inputValue.trim()) {
+      e.preventDefault()
+      setInputValue(recommendedQuestions[suggestionIndex])
+      textareaRef.current?.focus()
     }
   }
 
@@ -133,7 +103,7 @@ export default function ChatPanel({
     },
     inner: {
       width: '100%',
-      maxWidth: messagesMaxWidth,
+      maxWidth: '900px',
       margin: '0 auto',
       paddingLeft: '32px',
       paddingRight: '32px'
@@ -196,110 +166,99 @@ export default function ChatPanel({
           placeholder={placeholder}
           disabled={disabled}
           onSendMessage={handleLandingSend}
-          externalIsTyping={isTyping}
           externalIsStreaming={isStreaming}
-          messagesMaxWidth={messagesMaxWidth}
         />
       ) : (
         <>
-          <ChatInterface
+          <ChatMain
             {...chatProps}
-            messagesMaxWidth={messagesMaxWidth}
-            placeholder={placeholder}
-            disabled={disabled}
-            variant="main"
-            style={{ flex: 1, minHeight: 0 }}
-            externalIsTyping={isTyping}
-            externalIsStreaming={isStreaming}
-            externalStreamingStatus={streamingStatus}
-            externalStreamingHistory={streamingHistory}
-            disableWelcomeMessage
-            aboveInput={
-              <div style={{
-                width: '100%',
-                maxWidth: messagesMaxWidth,
-                margin: '0 auto',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-start',
-                gap: '8px',
-                paddingLeft: '32px',
-                paddingRight: '32px'
-              }}>
-                {/* Inline Deep/Wide bar (match NewChatLanding styling) */}
-                <div
-                  data-deepwide-inline-trigger
-                  onMouseEnter={() => setIsDeepWideHover(true)}
-                  onMouseLeave={() => setIsDeepWideHover(false)}
-                  title="Adjust Deep × Wide"
-                  style={{
-                    fontSize: '12px',
-                    color: isDeepWideHover ? '#e5e5e5' : '#888',
-                    fontFamily: 'inherit, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-                    lineHeight: '1.25',
-                    whiteSpace: 'pre',
-                    cursor: 'ew-resize',
-                    userSelect: 'none',
-                    transition: 'color 150ms ease, background 150ms ease',
-                    padding: '2px 8px',
-                    borderRadius: '8px',
-                    background: isDeepWideHover ? 'rgba(255,255,255,0.04)' : 'transparent',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'flex-start',
-                    gap: '2px'
-                  }}
-                >
-                  <div
-                    onClick={(e) => {
-                      const targetSpan = deepBlocksRef.current
-                      if (!targetSpan) return
-                      const barRect = targetSpan.getBoundingClientRect()
-                      let xWithin = e.clientX - barRect.left
-                      xWithin = Math.max(0, Math.min(barRect.width - 1, xWithin))
-                      const bucketPx = barRect.width / STEPS
-                      const stepIndex = Math.floor(xWithin / bucketPx)
-                      const next = (stepIndex + 1) / STEPS
-                      onResearchParamsChange({ deep: next, wide: researchParams.wide })
-                    }}
-                    style={{ display: 'flex', alignItems: 'center', gap: '2px', padding: 0, borderRadius: '6px', cursor: 'inherit' }}
-                  >
-                    <span style={{ fontFamily: 'inherit', fontWeight: 400 }}>DEEP</span>
-                    <span style={{ margin: '0 2px' }} />
-                    <span ref={deepBlocksRef} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>
-                      {makeBlocks(researchParams.deep)}
-                    </span>
-                    <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', display: 'inline-block', width: '4ch', textAlign: 'right' }}>{Math.round(researchParams.deep * 100)}%</span>
-                  </div>
-                  <div
-                    style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '2px', padding: 0, borderRadius: '6px', cursor: 'inherit' }}
-                    onClick={(e) => {
-                      const targetSpan = wideBlocksRef.current
-                      if (!targetSpan) return
-                      const barRect = targetSpan.getBoundingClientRect()
-                      let xWithin = e.clientX - barRect.left
-                      xWithin = Math.max(0, Math.min(barRect.width - 1, xWithin))
-                      const bucketPx = barRect.width / STEPS
-                      const stepIndex = Math.floor(xWithin / bucketPx)
-                      const next = (stepIndex + 1) / STEPS
-                      onResearchParamsChange({ deep: researchParams.deep, wide: next })
-                    }}
-                  >
-                    <span style={{ fontFamily: 'inherit', fontWeight: 400 }}>WIDE</span>
-                    <span style={{ margin: '0 2px' }} />
-                    <span ref={wideBlocksRef} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>
-                      {makeBlocks(researchParams.wide)}
-                    </span>
-                    <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', display: 'inline-block', width: '4ch', textAlign: 'right' }}>{Math.round(researchParams.wide * 100)}%</span>
-                  </div>
-                </div>
-                <div style={{ width: '1px', height: '24px', background: '#2a2a2a' }} />
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <MCPBar value={mcpConfig} onChange={onMcpConfigChange} />
-                </div>
-              </div>
-            }
+            isStreaming={isStreaming}
           />
+
+          {/* Inline toolbar directly above composer */}
+          <div style={{
+            width: '100%',
+            maxWidth: '900px',
+            margin: '0 auto',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-start',
+            gap: '8px',
+            paddingLeft: '32px',
+            paddingRight: '32px'
+          }}>
+            {/* Inline Deep/Wide bar (match NewChatLanding styling) */}
+            <div
+              data-deepwide-inline-trigger
+              onMouseEnter={() => setIsDeepWideHover(true)}
+              onMouseLeave={() => setIsDeepWideHover(false)}
+              title="Adjust Deep × Wide"
+              style={{
+                fontSize: '12px',
+                color: isDeepWideHover ? '#e5e5e5' : '#888',
+                fontFamily: 'inherit, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+                lineHeight: '1.25',
+                whiteSpace: 'pre',
+                cursor: 'ew-resize',
+                userSelect: 'none',
+                transition: 'color 150ms ease, background 150ms ease',
+                padding: '2px 8px',
+                borderRadius: '8px',
+                background: isDeepWideHover ? 'rgba(255,255,255,0.04)' : 'transparent',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-start',
+                gap: '2px'
+              }}
+            >
+              <div
+                onClick={(e) => {
+                  const targetSpan = deepBlocksRef.current
+                  if (!targetSpan) return
+                  const barRect = targetSpan.getBoundingClientRect()
+                  let xWithin = e.clientX - barRect.left
+                  xWithin = Math.max(0, Math.min(barRect.width - 1, xWithin))
+                  const bucketPx = barRect.width / STEPS
+                  const stepIndex = Math.floor(xWithin / bucketPx)
+                  const next = (stepIndex + 1) / STEPS
+                  onResearchParamsChange({ deep: next, wide: researchParams.wide })
+                }}
+                style={{ display: 'flex', alignItems: 'center', gap: '2px', padding: 0, borderRadius: '6px', cursor: 'inherit' }}
+              >
+                <span style={{ fontFamily: 'inherit', fontWeight: 400 }}>DEEP</span>
+                <span style={{ margin: '0 2px' }} />
+                <span ref={deepBlocksRef} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>
+                  {makeBlocks(researchParams.deep)}
+                </span>
+                <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', display: 'inline-block', width: '4ch', textAlign: 'right' }}>{Math.round(researchParams.deep * 100)}%</span>
+              </div>
+              <div
+                style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '2px', padding: 0, borderRadius: '6px', cursor: 'inherit' }}
+                onClick={(e) => {
+                  const targetSpan = wideBlocksRef.current
+                  if (!targetSpan) return
+                  const barRect = targetSpan.getBoundingClientRect()
+                  let xWithin = e.clientX - barRect.left
+                  xWithin = Math.max(0, Math.min(barRect.width - 1, xWithin))
+                  const bucketPx = barRect.width / STEPS
+                  const stepIndex = Math.floor(xWithin / bucketPx)
+                  const next = (stepIndex + 1) / STEPS
+                  onResearchParamsChange({ deep: researchParams.deep, wide: next })
+                }}
+              >
+                <span style={{ fontFamily: 'inherit', fontWeight: 400 }}>WIDE</span>
+                <span style={{ margin: '0 2px' }} />
+                <span ref={wideBlocksRef} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>
+                  {makeBlocks(researchParams.wide)}
+                </span>
+                <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', display: 'inline-block', width: '4ch', textAlign: 'right' }}>{Math.round(researchParams.wide * 100)}%</span>
+              </div>
+            </div>
+            <div style={{ width: '1px', height: '24px', background: '#2a2a2a' }} />
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <MCPBar value={mcpConfig} onChange={onMcpConfigChange} />
+            </div>
+          </div>
 
           {/* Composer */}
           <div style={inputStyles.container}>
@@ -309,16 +268,10 @@ export default function ChatPanel({
                 ref={textareaRef}
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                onKeyDown={(e) => {
-                  if (e.key === 'Tab' && !e.shiftKey && !inputValue.trim()) {
-                    e.preventDefault()
-                    setInputValue(recommendedQuestions[suggestionIndex])
-                    textareaRef.current?.focus()
-                  }
-                }}
+                  onKeyDown={handleKeyDown}
                   onFocus={() => setIsFocused(true)}
                   onBlur={() => setIsFocused(false)}
+                  disabled={isStreaming || disabled}
                 placeholder={''}
                   style={inputStyles.textarea}
                   className="puppychat-textarea"
@@ -326,16 +279,16 @@ export default function ChatPanel({
                 />
                 <button
                   onClick={handleSend}
-                  disabled={!inputValue.trim() || isTyping || isStreaming || disabled}
+                  disabled={!inputValue.trim() || isStreaming || disabled}
                   style={{
                     ...inputStyles.sendButton,
-                    backgroundColor: inputValue.trim() && !isTyping && !isStreaming ? '#4a90e2' : '#3a3a3a',
+                    backgroundColor: inputValue.trim() && !isStreaming ? '#4a90e2' : '#3a3a3a',
                     color: '#ffffff',
-                    boxShadow: inputValue.trim() && !isTyping && !isStreaming ? '0 4px 12px rgba(74, 144, 226, 0.3)' : '0 2px 8px rgba(0, 0, 0, 0.2)',
-                    opacity: !inputValue.trim() || isTyping || isStreaming ? 0.3 : 1
+                    boxShadow: inputValue.trim() && !isStreaming ? '0 4px 12px rgba(74, 144, 226, 0.3)' : '0 2px 8px rgba(0, 0, 0, 0.2)',
+                    opacity: !inputValue.trim() || isStreaming ? 0.3 : 1
                   }}
                 >
-                  {isTyping || isStreaming ? (
+                  {isStreaming ? (
                     <svg className="puppychat-spin" style={{ height: '24px', width: '24px' }} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                       <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3"></circle>
                       <path style={{ opacity: 0.75 }} fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
