@@ -25,6 +25,7 @@ interface ChatMessage {
   content: string
   timestamp?: number
   actionList?: string[]
+  sources?: { service: string; query: string; url: string }[]
 }
 
 export default function Home() {
@@ -393,6 +394,11 @@ export default function Home() {
                 onStreamUpdate?.(finalReport, true, statusHistory) // Stream the accumulated report
                 // Update assistant content and (if any) actionList
                 assistantMessage = { ...assistantMessage, content: finalReport, actionList: statusHistory.length > 0 ? [...statusHistory] : assistantMessage.actionList }
+                workingHistory = [...localHistoryBefore, assistantMessage]
+                updateMessages(targetSessionId!, workingHistory)
+              } else if (data.action === 'sources_update' && Array.isArray(data.sources)) {
+                // Update assistant message with latest minimal sources and sync UI
+                assistantMessage = { ...assistantMessage, sources: data.sources }
                 workingHistory = [...localHistoryBefore, assistantMessage]
                 updateMessages(targetSessionId!, workingHistory)
               } else if (data.message) {

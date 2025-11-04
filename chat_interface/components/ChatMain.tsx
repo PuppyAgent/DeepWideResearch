@@ -11,6 +11,7 @@ export interface Message {
   sender: 'user' | 'bot'
   timestamp: Date
   actionList?: string[] 
+  sources?: { service: string; query: string; url: string }[]
 }
 
 // Add component Props interface (moved from ChatInterface)

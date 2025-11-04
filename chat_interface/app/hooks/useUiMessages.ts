@@ -30,7 +30,8 @@ export function useUiMessages(
         id: `${m?.timestamp ?? idx}-${idx}`,
         content: m?.content ?? '',
         sender: (m?.role === 'assistant' ? 'bot' : 'user') as 'bot' | 'user',
-        timestamp: new Date(m?.timestamp ?? Date.now())
+        timestamp: new Date(m?.timestamp ?? Date.now()),
+        ...(Array.isArray(m?.sources) ? { sources: m.sources } : {})
       }
 
       // Prefer persisted actionList; fallback to cached streaming history for the last assistant message

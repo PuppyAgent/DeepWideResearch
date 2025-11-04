@@ -1,7 +1,7 @@
 import { Copy, Check } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import MarkdownRenderer from './MarkdownRenderer'
-import type { Message } from '../types'
+import type { Message, SourceItem } from '../types'
 
 // Runtime CSS injection removed; animations and tooltip styles live in globals.css
 
@@ -87,6 +87,9 @@ export default function BotMessage({ message, actionSteps }: BotMessageProps) {
   const resolvedActionSteps: ActionStep[] = Array.isArray(actionSteps) ? actionSteps : []
   const contentToRender = message.content || ''
   const shouldShowContent = contentToRender.length > 0
+  const sources: SourceItem[] = Array.isArray(message.sources) ? message.sources : []
+  const stepsBefore: ActionStep[] = resolvedActionSteps.length > 1 ? resolvedActionSteps.slice(0, -1) : []
+  const lastStep: ActionStep | null = resolvedActionSteps.length > 0 ? resolvedActionSteps[resolvedActionSteps.length - 1] : null
 
   return (
     <div 
@@ -97,9 +100,9 @@ export default function BotMessage({ message, actionSteps }: BotMessageProps) {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', width: '100%', minWidth: 0, padding: '16px 20px', borderRadius: '16px', border: '1px solid rgba(255, 255, 255, 0.05)' }}>
         <>
             {/* 📜 执行步骤记录 - 时间线样式 */}
-            {resolvedActionSteps.length > 0 && (
+            {stepsBefore.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '12px', width: '100%' }}>
-                {resolvedActionSteps.map((step, index) => {
+                {stepsBefore.map((step, index) => {
                   const isLastItem = index === resolvedActionSteps.length - 1
                   const status: ActionStepStatus | undefined = step.status
                   const isCompleted = status === 'completed'
@@ -177,6 +180,160 @@ export default function BotMessage({ message, actionSteps }: BotMessageProps) {
                     </div>
                   )
                 })}
+              </div>
+            )}
+            {/* 🔗 信息源卡片 - 简洁卡片样式（favicon + url preview + service + query） */}
+            {sources.length > 0 && (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(5, 1fr)',
+                  gap: '10px',
+                  width: '100%',
+                  marginBottom: '12px'
+                }}
+              >
+                {sources.map((src, idx) => {
+                  let domain = ''
+                  try {
+                    const u = new URL(src.url)
+                    domain = u.hostname.replace(/^www\./, '')
+                  } catch {}
+                  const favicon = getFaviconUrl(src.url)
+                  const mcpLogo = (() => {
+                    const s = (src.service || '').toLowerCase()
+                    if (s === 'tavily') return '/tavilylogo.png'
+                    if (s === 'exa') return '/exalogo.png'
+                    return ''
+                  })()
+                  const queryPreview = (src.query || '').slice(0, 80)
+                  const isCardHovered = hoveredUrl === src.url
+                  return (
+                    <a
+                      key={`${src.url}-${idx}`}
+                      href={src.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      onMouseEnter={(e) => handleLinkHover(src.url, e)}
+                      onMouseLeave={(e) => { e.stopPropagation(); handleLinkLeave() }}
+                      style={{ textDecoration: 'none', width: '100%', display: 'block', minWidth: 0, overflow: 'hidden' }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '8px',
+                          padding: '12px',
+                          border: `1px solid ${isCardHovered ? 'rgba(59,130,246,0.9)' : 'rgba(255,255,255,0.12)'}`,
+                          background: isCardHovered ? 'rgba(59,130,246,0.18)' : 'rgba(255,255,255,0.02)',
+                          borderRadius: '12px',
+                          transition: 'border-color 0.15s ease, background-color 0.15s ease',
+                          minWidth: 0,
+                          overflow: 'hidden'
+                        }}
+                      >
+                        {/* Top row: favicon + domain */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, width: '100%' }}>
+                          {favicon && (
+                            <img
+                              src={favicon}
+                              alt="favicon"
+                              style={{ width: 18, height: 18, borderRadius: 4, flexShrink: 0, opacity: 0.9 }}
+                            />
+                          )}
+                          <div style={{ fontSize: '14px', color: '#d2d2d2', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%', flex: 1 }}>
+                            {domain || src.url}
+                          </div>
+                        </div>
+
+                        {/* Bottom bar: left = "query" (lighter, italic) | right = MCP logo */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2, minWidth: 0, width: '100%' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                            {queryPreview && (
+                              <span style={{ fontSize: '12px', color: 'rgba(255,255,255,0.6)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontStyle: 'italic', maxWidth: '100%' }}>
+                                {`"${queryPreview}"`}
+                              </span>
+                            )}
+                          </div>
+                          {mcpLogo && (
+                            <img
+                              src={mcpLogo}
+                              alt={`${src.service} logo`}
+                              style={{ width: 16, height: 16, borderRadius: 3, flexShrink: 0, opacity: 0.95 }}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </a>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* 📌 最新进度（单行） - 放在信息源网格下方 */}
+            {lastStep && (
+              <div style={{ display: 'flex', flexDirection: 'column', marginTop: '8px', marginBottom: '12px', width: '100%' }}>
+                {(() => {
+                  const status: ActionStepStatus | undefined = lastStep.status
+                  const isCompleted = status === 'completed'
+                  const isRunning = status === 'running'
+                  const isPending = status === 'pending'
+                  const isError = status === 'error'
+                  return (
+                    <div 
+                      style={{
+                        display: 'flex',
+                        alignItems: 'flex-start',
+                        gap: '8px',
+                        position: 'relative'
+                      }}
+                    >
+                      <div style={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'center',
+                        flexShrink: 0,
+                        position: 'relative',
+                        paddingTop: '7px'
+                      }}>
+                        <div style={{
+                          width: '10px',
+                          height: '10px',
+                          borderRadius: '50%',
+                          backgroundColor: isCompleted ? '#888' : (isError ? 'rgba(255, 107, 107, 0.35)' : 'transparent'),
+                          border: isCompleted ? 'none' : (isError ? '2px solid #ff6b6b' : (isRunning ? '2px solid #888' : '2px solid #888')),
+                          flexShrink: 0,
+                          zIndex: 1,
+                          animation: isRunning ? 'breathe 2s ease-in-out infinite' : 'none',
+                          transformOrigin: 'center'
+                        }} />
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '14px',
+                          color: 'transparent',
+                          WebkitTextFillColor: 'transparent',
+                          padding: 0,
+                          backgroundImage: isError
+                            ? 'linear-gradient(90deg, #ff7b7b 0%, #ff9b9b 100%)'
+                            : isCompleted
+                              ? 'linear-gradient(90deg, #999 0%, #999 100%)'
+                              : 'linear-gradient(90deg, #888 0%, #888 48%, #fff 50%, #888 52%, #888 100%)',
+                          backgroundClip: 'text',
+                          WebkitBackgroundClip: 'text',
+                          backgroundSize: isRunning ? '200% 100%' : '100% 100%',
+                          animation: isRunning ? 'textFlash 2s linear infinite' : 'none',
+                          transition: 'opacity 0.3s ease-in-out',
+                          opacity: isCompleted ? 0.8 : (isPending ? 0.7 : 1),
+                          lineHeight: '1.6',
+                          flex: 1
+                        }}
+                      >
+                        {lastStep.text}
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
             )}
             

@@ -9,6 +9,7 @@ export interface ChatMessage {
   content: string
   timestamp?: number
   actionList?: string[]
+  sources?: { service: string; query: string; url: string }[]
 }
 
 export interface Session {
@@ -122,12 +123,17 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         content: string
         created_at: string | null
       }
-      const unpackContent = (raw: string): { content: string; actionList?: string[] } => {
+      const unpackContent = (raw: string): { content: string; actionList?: string[]; sources?: { service: string; query: string; url: string }[] } => {
         try {
           const obj = JSON.parse(raw)
           if (obj && obj.dw_format === 'v1' && typeof obj.content === 'string') {
             const actionList = Array.isArray(obj.actionList) ? obj.actionList.filter((x: unknown) => typeof x === 'string') : undefined
-            return { content: obj.content as string, actionList }
+            const sources = Array.isArray(obj.sources)
+              ? obj.sources
+                  .map((s: any) => ({ service: String(s?.service || ''), query: String(s?.query || ''), url: String(s?.url || '') }))
+                  .filter((s: any) => s.service && s.url)
+              : undefined
+            return { content: obj.content as string, actionList, sources }
           }
         } catch (_) {
           // fall through
@@ -135,11 +141,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         return { content: raw }
       }
       const msgs: ChatMessage[] = (data || []).map((m: MessageRow) => {
-        const { content, actionList } = unpackContent(m.content)
+        const { content, actionList, sources } = unpackContent(m.content)
         return {
           role: m.role,
           content,
           actionList,
+          sources,
           timestamp: m.created_at ? Date.parse(m.created_at) : undefined
         }
       })
@@ -215,7 +222,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           thread_id: newId,
           user_id: authSession.user.id,
           role: m.role,
-          content: JSON.stringify({ dw_format: 'v1', content: m.content, actionList: m.actionList && m.actionList.length > 0 ? m.actionList : undefined }),
+          content: JSON.stringify({
+            dw_format: 'v1',
+            content: m.content,
+            actionList: m.actionList && m.actionList.length > 0 ? m.actionList : undefined,
+            sources: m.sources && m.sources.length > 0 ? m.sources : undefined
+          }),
           created_at: m.timestamp ? new Date(m.timestamp).toISOString() : undefined,
         }))
         const { error: msgErr } = await supabase.from('messages').insert(rows)
@@ -358,7 +370,12 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           thread_id: sessionId,
           user_id: authSession.user.id,
           role: m.role,
-          content: JSON.stringify({ dw_format: 'v1', content: m.content, actionList: m.actionList && m.actionList.length > 0 ? m.actionList : undefined }),
+          content: JSON.stringify({
+            dw_format: 'v1',
+            content: m.content,
+            actionList: m.actionList && m.actionList.length > 0 ? m.actionList : undefined,
+            sources: m.sources && m.sources.length > 0 ? m.sources : undefined
+          }),
           created_at: new Date(m.timestamp ?? Date.now()).toISOString(),
         }))
         await supabase.from('messages').insert(rows)
