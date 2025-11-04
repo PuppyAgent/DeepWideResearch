@@ -264,7 +264,7 @@ export default function ChatInterface({
   
 
   return (
-    <div style={{ ...styles.container, ...(style || {}) }} className={className} aria-hidden="true" data-nosnippet data-variant={variant}>
+    <div style={{ ...styles.container, ...(style || {}) }} className={className} data-nosnippet data-variant={variant}>
       {/* Header removed: page-level header is used instead */}
 
       {/* Messages */}
@@ -279,9 +279,7 @@ export default function ChatInterface({
               <BotMessage
                 key={message.id}
                 message={{ ...message, content: displayContent }}
-                showAvatar={false}
-                isStreaming={isWelcomeMessage && isStreamingWelcome}
-                streamingHistory={message.streamingHistory || []}  // 显示保存的时间线
+                actionSteps={(message.streamingHistory || []).map((text) => ({ text, status: 'completed' }))}
               />
             ) : (
               <UserMessage
@@ -298,15 +296,15 @@ export default function ChatInterface({
             <BotMessage 
               message={{
                 id: 'typing',
-                content: (externalStreamingStatus ?? streamingStatus) || '',
+                content: '',
                 sender: 'bot',
                 timestamp: new Date()
               }}
               isTyping={(externalIsTyping ?? isTyping) && !(externalIsStreaming ?? isStreaming)}
-              streamingStatus={(externalIsStreaming ?? isStreaming) ? (externalStreamingStatus ?? streamingStatus) : undefined}
-              streamingHistory={externalStreamingHistory ?? streamingHistory} 
-              isStreaming={externalIsStreaming ?? isStreaming}
-              showAvatar={false}
+              actionSteps={(externalStreamingHistory ?? streamingHistory).map((text, idx, arr) => ({
+                text,
+                status: (externalIsStreaming ?? isStreaming) ? (idx === arr.length - 1 ? 'running' : 'completed') : 'completed'
+              }))}
             />
           )}
           <div ref={messagesEndRef} />

@@ -29,3 +29,39 @@ html, body {
 .puppychat-textarea::placeholder {
   font-size: 16px;
 }
+
+/* Chat scroll container scrollbar - transparent track, dark gray thumb */
+.puppychat-messages {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: #4d4d4d transparent;
+}
+.puppychat-messages::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.puppychat-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+.puppychat-messages::-webkit-scrollbar-thumb {
+  background-color: #4d4d4d;
+  border-radius: 8px;
+  border: 2px solid transparent; /* create spacing against track */
+}
+
+/* Side menu/history scrollbar - transparent track, dark gray thumb */
+.puppychat-scrollbar-dark {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: #4d4d4d transparent;
+}
+.puppychat-scrollbar-dark::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+.puppychat-scrollbar-dark::-webkit-scrollbar-track {
+  background: transparent;
+}
+.puppychat-scrollbar-dark::-webkit-scrollbar-thumb {
+  background-color: #4d4d4d;
+  border-radius: 8px;
+  border: 2px solid transparent;
+}

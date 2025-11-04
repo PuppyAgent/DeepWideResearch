@@ -16,16 +16,23 @@ const StyleManager = {
   }
 }
 
-export interface BotMessageProps {
-  message: Message
-  showAvatar?: boolean
-  isTyping?: boolean
-  streamingStatus?: string  // For status updates like "thinking", "using tools", etc.
-  streamingHistory?: string[] // 📜 完整的状态历史记录
-  isStreaming?: boolean      // For report content streaming
+export type ActionStepStatus = 'pending' | 'running' | 'completed' | 'error'
+
+export interface ActionStep {
+  id?: string
+  text: string
+  status?: ActionStepStatus
 }
 
-export default function BotMessage({ message, showAvatar = true, isTyping = false, streamingStatus, streamingHistory = [], isStreaming = false }: BotMessageProps) {
+export interface BotMessageProps {
+  message: Message
+  isTyping?: boolean
+  actionSteps?: ActionStep[]
+  responseContent?: string
+  isStreamingResponse?: boolean
+}
+
+export default function BotMessage({ message, isTyping = false, actionSteps, responseContent, isStreamingResponse }: BotMessageProps) {
   const [isHovered, setIsHovered] = useState(false)
   const [copied, setCopied] = useState(false)
   const [hoveredUrl, setHoveredUrl] = useState<string | null>(null)
@@ -105,11 +112,13 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
 
   const handleCopy = async () => {
     try {
+      const copyPayload = (responseContent ?? message.content) || ''
+      if (!copyPayload) return
       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(message.content)
+        await navigator.clipboard.writeText(copyPayload)
       } else if (typeof document !== 'undefined') {
         const textarea = document.createElement('textarea')
-        textarea.value = message.content
+        textarea.value = copyPayload
         textarea.style.position = 'fixed'
         textarea.style.left = '-9999px'
         document.body.appendChild(textarea)
@@ -226,18 +235,6 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
     copyButton: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', borderRadius: '4px', color: '#a0a0a0', cursor: 'pointer' },
     typingDots: { display: 'flex', alignItems: 'center', gap: '8px', height: '20px' },
     dot: { width: '8px', height: '8px', backgroundColor: '#4a90e2', borderRadius: '50%', animation: 'pulse 1s infinite' },
-    statusStreaming: { 
-      fontSize: '14px', 
-      color: 'transparent',
-      marginBottom: '8px',
-      padding: 0,
-      background: 'linear-gradient(90deg, #444 0%, #444 30%, #ddd 50%, #444 70%, #444 100%)',
-      backgroundClip: 'text',
-      WebkitBackgroundClip: 'text',
-      backgroundSize: '200% 100%',
-      animation: 'textFlash 2s linear infinite',
-      transition: 'opacity 0.3s ease-in-out'
-    },
     reportStreaming: {
       fontSize: '16px',
       color: '#d2d2d2',
@@ -249,6 +246,12 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
       width: '100%'
     }
   }
+
+  // 极简：仅使用显式 props
+  const resolvedActionSteps: ActionStep[] = Array.isArray(actionSteps) ? actionSteps : []
+  const contentToRender = (typeof responseContent === 'string' ? responseContent : message.content) || ''
+  const shouldShowContent = contentToRender.length > 0
+  const isReportStreaming = Boolean(isStreamingResponse)
 
   return (
     <div 
@@ -264,18 +267,21 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
           </div>
         ) : (
           <>
-            {/* 📜 历史步骤记录 - 时间线样式 */}
-            {streamingHistory && streamingHistory.length > 0 && (
+            {/* 📜 执行步骤记录 - 时间线样式 */}
+            {resolvedActionSteps.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', marginBottom: '12px', width: '100%' }}>
-                {streamingHistory.map((step, index) => {
-                  // 如果不是streaming状态，所有步骤都是已完成的
-                  const isCurrentStep = isStreaming && index === streamingHistory.length - 1
-                  const isCompleted = !isCurrentStep
-                  const isLastItem = index === streamingHistory.length - 1
-                  
+                {resolvedActionSteps.map((step, index) => {
+                  const isLastItem = index === resolvedActionSteps.length - 1
+                  const status: ActionStepStatus | undefined = step.status
+                  const isCompleted = status
+                    ? status === 'completed'
+                    : !(isReportStreaming && isLastItem)
+                  const isRunning = status ? status === 'running' : (isReportStreaming && isLastItem)
+                  const isPending = status ? status === 'pending' : false
+                  const isError = status ? status === 'error' : false
                   return (
                     <div 
-                      key={index}
+                      key={step.id ?? `action-step-${index}`}
                       style={{
                         display: 'flex',
                         alignItems: 'flex-start',
@@ -297,11 +303,11 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
                           width: '14px',
                           height: '14px',
                           borderRadius: '50%',
-                          backgroundColor: isCompleted ? '#888' : 'transparent', // 实心灰色 vs 空心灰色
-                          border: isCompleted ? 'none' : '2px solid #888',
+                          backgroundColor: isCompleted ? '#888' : (isError ? 'rgba(255, 107, 107, 0.35)' : 'transparent'), // 实心灰色 vs 空心灰色
+                          border: isCompleted ? 'none' : (isError ? '2px solid #ff6b6b' : (isRunning ? '2px solid #888' : '2px solid #888')),
                           flexShrink: 0,
                           zIndex: 1,
-                          animation: isCompleted ? 'none' : 'breathe 2s ease-in-out infinite',
+                          animation: isRunning ? 'breathe 2s ease-in-out infinite' : 'none',
                           transformOrigin: 'center'
                         }} />
                         
@@ -323,20 +329,22 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
                           fontSize: '14px',
                           color: 'transparent',
                           padding: 0,
-                          backgroundImage: isCompleted
-                            ? 'linear-gradient(90deg, #999 0%, #999 100%)' // 已完成：静态浅灰色
-                            : 'linear-gradient(90deg, #888 0%, #888 30%, #fff 50%, #888 70%, #888 100%)', // 进行中：滚动渐变
+                          backgroundImage: isError
+                            ? 'linear-gradient(90deg, #ff7b7b 0%, #ff9b9b 100%)'
+                            : isCompleted
+                              ? 'linear-gradient(90deg, #999 0%, #999 100%)' // 已完成：静态浅灰色
+                              : 'linear-gradient(90deg, #888 0%, #888 30%, #fff 50%, #888 70%, #888 100%)', // 进行中：滚动渐变
                           backgroundClip: 'text',
                           WebkitBackgroundClip: 'text',
-                          backgroundSize: isCompleted ? '100% 100%' : '200% 100%',
-                          animation: isCompleted ? 'none' : 'textFlash 2s linear infinite',
+                          backgroundSize: isRunning ? '200% 100%' : '100% 100%',
+                          animation: isRunning ? 'textFlash 2s linear infinite' : 'none',
                           transition: 'opacity 0.3s ease-in-out',
-                          opacity: isCompleted ? 0.8 : 1,
+                          opacity: isCompleted ? 0.8 : (isPending ? 0.7 : 1),
                           lineHeight: '1.6',
                           flex: 1
                         }}
                       >
-                        {step}
+                        {step.text}
                       </div>
                     </div>
                   )
@@ -345,20 +353,10 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
             )}
             
             {/* Message content - with or without report streaming */}
-            {/* Show content when: 
-                1. No streaming status (normal message)
-                2. Content is different from the last history item (avoid duplication)
-                3. Streaming report content (longer content indicates it's a report, not a status message)
-            */}
-            {message.content && (
-              // Don't show if it's the same as the last history item (avoid duplication)
-              streamingHistory.length === 0 || 
-              message.content !== streamingHistory[streamingHistory.length - 1] ||
-              message.content.length > 100  // If content is long, it's likely a report
-            ) && (
-              <div style={isStreaming ? styles.reportStreaming : styles.content}>
+            {shouldShowContent && (
+              <div style={isReportStreaming ? styles.reportStreaming : styles.content}>
                 <MarkdownRenderer
-                  content={(message.content || '').replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n')}
+                  content={(contentToRender || '').replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n')}
                   componentsStyle={{
                     p: { margin: '12px 0', lineHeight: '1.6', wordBreak: 'break-word', overflowWrap: 'break-word' },
                     h1: styles.h1,
@@ -386,6 +384,15 @@ export default function BotMessage({ message, showAvatar = true, isTyping = fals
                     }
                   }}
                 />
+              </div>
+            )}
+
+            {/* Fallback: minimal typing indicator when no actions and no content */}
+            {resolvedActionSteps.length === 0 && !shouldShowContent && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', height: '20px' }}>
+                <div style={{ width: '8px', height: '8px', backgroundColor: '#4a90e2', borderRadius: '50%', animation: 'pulse 1s infinite' }} />
+                <div style={{ width: '8px', height: '8px', backgroundColor: '#4a90e2', borderRadius: '50%', animation: 'pulse 1s infinite', animationDelay: '150ms' }} />
+                <div style={{ width: '8px', height: '8px', backgroundColor: '#4a90e2', borderRadius: '50%', animation: 'pulse 1s infinite', animationDelay: '300ms' }} />
               </div>
             )}
           </>
