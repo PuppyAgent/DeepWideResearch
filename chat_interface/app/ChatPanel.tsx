@@ -48,6 +48,35 @@ export default function ChatPanel({
     }, 3500)
     return () => clearInterval(id)
   }, [])
+  // Wrapper for NewChatLanding: trigger streaming UI immediately on first send
+  const handleLandingSend = async (text: string) => {
+    if (!text.trim() || disabled || !onSendMessage) return ''
+    setIsTyping(true)
+    setIsStreaming(true)
+    setStreamingStatus('Connecting…')
+    setStreamingHistory([])
+    if (!hasSentFirstMessage) setHasSentFirstMessage(true)
+    try {
+      const result = await onSendMessage(text, (content: string, streaming: boolean = true, statusHistory?: string[]) => {
+        if (streaming) {
+          setIsTyping(false)
+          setIsStreaming(true)
+          setStreamingStatus(content || '')
+          if (statusHistory) setStreamingHistory(statusHistory)
+        } else {
+          setIsStreaming(false)
+          setStreamingStatus(content || '')
+          if (statusHistory) setStreamingHistory(statusHistory)
+        }
+      })
+      return result
+    } finally {
+      setIsTyping(false)
+      setIsStreaming(false)
+      setStreamingStatus('')
+    }
+  }
+
 
   // Deep/Wide inline bar helpers (match NewChatLanding)
   const BAR_LEN = 12
@@ -166,7 +195,7 @@ export default function ChatPanel({
           onMcpConfigChange={onMcpConfigChange}
           placeholder={placeholder}
           disabled={disabled}
-          onSendMessage={onSendMessage}
+          onSendMessage={handleLandingSend}
           externalIsTyping={isTyping}
           externalIsStreaming={isStreaming}
           messagesMaxWidth={messagesMaxWidth}
