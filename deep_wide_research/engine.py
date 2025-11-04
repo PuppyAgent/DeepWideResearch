@@ -71,16 +71,16 @@ MODEL_GRID = [
     # deep = 0.25
     [
         ("openai/gpt-4.1", "openai/gpt-4.1"),   # wide = 0.25
-        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.5
-        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.75
-        ("openai/gpt-5", "openai/gpt-5"),   # wide = 1.0
+        ("openai/gpt-4.1", "openai/gpt-4.1"),   # wide = 0.5
+        ("openai/gpt-4.1", "openai/gpt-4.1"),   # wide = 0.75
+        ("openai/gpt-4.1", "openai/gpt-4.1"),   # wide = 1.0
     ],
     # deep = 0.5
     [
-        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.25
-        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.5
-        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.75
-        ("openai/gpt-5", "openai/gpt-5"),   # wide = 1.0
+        ("openai/gpt-4.1", "openai/gpt-5"),   # wide = 0.25
+        ("openai/gpt-4.1", "openai/gpt-5"),   # wide = 0.5
+        ("openai/gpt-4.1", "openai/gpt-5"),   # wide = 0.75
+        ("openai/gpt-4.1", "openai/gpt-5"),   # wide = 1.0
     ],
     # deep = 0.75
     [
