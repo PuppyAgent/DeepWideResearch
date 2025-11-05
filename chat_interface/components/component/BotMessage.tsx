@@ -256,11 +256,28 @@ export default function BotMessage({ message, actionSteps }: BotMessageProps) {
                             )}
                           </div>
                           {mcpLogo && (
-                            <img
-                              src={mcpLogo}
-                              alt={`${src.service} logo`}
-                              style={{ width: 16, height: 16, borderRadius: 3, flexShrink: 0, opacity: 0.95 }}
-                            />
+                            <div
+                              style={{
+                                width: 18,
+                                height: 18,
+                                borderRadius: '50%',
+                                border: '1px solid rgba(255,255,255,0.25)',
+                                boxSizing: 'border-box',
+                                padding: 2,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                                opacity: 0.95,
+                                background: 'rgba(255,255,255,0.03)'
+                              }}
+                            >
+                              <img
+                                src={mcpLogo}
+                                alt={`${src.service} logo`}
+                                style={{ width: 12, height: 12, objectFit: 'contain' }}
+                              />
+                            </div>
                           )}
                         </div>
                       </div>

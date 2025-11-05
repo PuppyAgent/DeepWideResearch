@@ -129,9 +129,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
           if (obj && obj.dw_format === 'v1' && typeof obj.content === 'string') {
             const actionList = Array.isArray(obj.actionList) ? obj.actionList.filter((x: unknown) => typeof x === 'string') : undefined
             const sources = Array.isArray(obj.sources)
-              ? obj.sources
-                  .map((s: any) => ({ service: String(s?.service || ''), query: String(s?.query || ''), url: String(s?.url || '') }))
-                  .filter((s: any) => s.service && s.url)
+              ? (obj.sources as Array<{ service?: unknown; query?: unknown; url?: unknown }>)
+                  .map((s) => ({
+                    service: String(s?.service ?? ''),
+                    query: String(s?.query ?? ''),
+                    url: String(s?.url ?? ''),
+                  }))
+                  .filter((s) => Boolean(s.service && s.url))
               : undefined
             return { content: obj.content as string, actionList, sources }
           }
