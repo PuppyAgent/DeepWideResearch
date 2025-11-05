@@ -22,9 +22,10 @@ export interface McpConfigValue {
 export interface MCPBarProps {
   value: McpConfigValue
   onChange: (value: McpConfigValue) => void
+  onAddSourceClick?: () => void
 }
 
-export default function MCPBar({ value, onChange }: MCPBarProps) {
+export default function MCPBar({ value, onChange, onAddSourceClick }: MCPBarProps) {
   // Filter services with enabled tools
   const activeServices = value.services.filter(service => 
     service.enabled && service.tools.some(tool => tool.enabled)
@@ -68,6 +69,7 @@ export default function MCPBar({ value, onChange }: MCPBarProps) {
             onChange({ services: newServices })
           }
         }}
+        onAddSourceClick={onAddSourceClick}
       />
     </>
   )
@@ -77,9 +79,10 @@ export default function MCPBar({ value, onChange }: MCPBarProps) {
 interface AddMCPButtonProps {
   removedServices: McpService[]
   onRestoreService: (serviceName: string) => void
+  onAddSourceClick?: () => void
 }
 
-function AddMCPButton({ removedServices, onRestoreService }: AddMCPButtonProps) {
+function AddMCPButton({ removedServices, onRestoreService, onAddSourceClick }: AddMCPButtonProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isAddHover, setIsAddHover] = useState(false)
 
@@ -109,6 +112,7 @@ function AddMCPButton({ removedServices, onRestoreService }: AddMCPButtonProps) 
   return (
     <div style={{ position: 'relative' }}>
       {/* Add MCP Panel */}
+      {(!onAddSourceClick) && (
       <div
         style={{
           position: 'absolute',
@@ -267,12 +271,17 @@ function AddMCPButton({ removedServices, onRestoreService }: AddMCPButtonProps) 
           </div>
         </div>
       </div>
+      )}
 
       <div style={{ display: 'flex', alignItems: 'center' }}>
       <button
         onClick={(e) => {
           e.stopPropagation()
+          if (onAddSourceClick) {
+            onAddSourceClick()
+          } else {
           setIsOpen(!isOpen)
+          }
         }}
           onMouseEnter={(e) => {
             setIsAddHover(true)

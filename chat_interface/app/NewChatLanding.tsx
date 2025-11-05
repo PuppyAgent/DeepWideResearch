@@ -2,6 +2,7 @@
 
 import React from 'react'
 import MCPBar, { type McpConfigValue } from './MCPBar'
+import AddSourcePanel from './AddSourcePanel'
 
 export interface NewChatLandingProps {
   researchParams: { deep: number; wide: number }
@@ -36,6 +37,7 @@ export default function NewChatLanding({
   const wideBlocksRef = React.useRef<HTMLSpanElement>(null)
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
   const [suggestionIndex, setSuggestionIndex] = React.useState(0)
+  const [isAddSourceOpen, setIsAddSourceOpen] = React.useState(false)
 
   const isBusy = !!externalIsTyping || !!externalIsStreaming
 
@@ -109,6 +111,7 @@ export default function NewChatLanding({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%' }}>
+      <AddSourcePanel open={isAddSourceOpen} onClose={() => setIsAddSourceOpen(false)} />
       <div style={{
         flex: 1,
         minHeight: 0,
@@ -145,7 +148,7 @@ export default function NewChatLanding({
             paddingTop: '8px',
             paddingBottom: '0px'
           }}>
-            <MCPBar value={mcpConfig} onChange={onMcpConfigChange} />
+            <MCPBar value={mcpConfig} onChange={onMcpConfigChange} onAddSourceClick={() => setIsAddSourceOpen(true)} />
           </div>
 
           {/* Centered search-style input */}

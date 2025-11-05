@@ -3,6 +3,7 @@
 import React from 'react'
 import ChatMain, { type ChatMainProps } from '../components/ChatMain'
 import MCPBar, { type McpConfigValue } from './MCPBar'
+import AddSourcePanel from './AddSourcePanel'
 import NewChatLanding from './NewChatLanding'
 
 export interface ChatPanelProps extends ChatMainProps {
@@ -36,6 +37,7 @@ export default function ChatPanel({
   const [isDeepWideHover, setIsDeepWideHover] = React.useState(false)
   const deepBlocksRef = React.useRef<HTMLSpanElement>(null)
   const wideBlocksRef = React.useRef<HTMLSpanElement>(null)
+  const [isAddSourceOpen, setIsAddSourceOpen] = React.useState(false)
   const recommendedQuestions = [
     'What were the 2025 Nobel Prizes awarded for?',
     'Explain quantum computing.',
@@ -157,6 +159,7 @@ export default function ChatPanel({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', ...(style || {}) }}>
+      <AddSourcePanel open={isAddSourceOpen} onClose={() => setIsAddSourceOpen(false)} />
       {showNewChatLanding ? (
         <NewChatLanding
           researchParams={researchParams}
@@ -256,7 +259,7 @@ export default function ChatPanel({
             </div>
             <div style={{ width: '1px', height: '24px', background: '#2a2a2a' }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <MCPBar value={mcpConfig} onChange={onMcpConfigChange} />
+              <MCPBar value={mcpConfig} onChange={onMcpConfigChange} onAddSourceClick={() => setIsAddSourceOpen(true)} />
             </div>
           </div>
 
