@@ -85,6 +85,19 @@ export default function MainHeaderBar({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div 
               data-dev-button
+              onClick={(e) => {
+                e.stopPropagation()
+                // Navigate to Plans tab
+                try {
+                  const evt = new CustomEvent('navigate-to-plans')
+                  window.dispatchEvent(evt)
+                } catch {}
+                // Ensure dev panel is opened
+                if (!isDevModeOpen) {
+                  onToggleDevMode()
+                }
+              }}
+              title={'Manage plan'}
               style={{
                 height: '36px',
                 display: 'flex',
@@ -95,7 +108,7 @@ export default function MainHeaderBar({
                 border: '1px solid #2a2a2a',
                 background: 'rgba(20,20,20,0.9)',
                 backdropFilter: 'blur(8px)',
-                cursor: 'default',
+                cursor: 'pointer',
                 transition: 'all 200ms ease'
               }}
               onMouseEnter={(e) => {
