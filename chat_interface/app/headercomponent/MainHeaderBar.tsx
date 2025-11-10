@@ -102,8 +102,8 @@ export default function MainHeaderBar({
                 height: '36px',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '8px',
-                padding: '0 12px 0 4px',
+                gap: '10px',
+                padding: '0 12px',
                 borderRadius: '18px',
                 border: '1px solid #2a2a2a',
                 background: 'rgba(20,20,20,0.9)',
@@ -124,38 +124,27 @@ export default function MainHeaderBar({
                 }
               }}
             >
-              <div style={{
-                width: '28px',
-                height: '28px',
-                borderRadius: '14px',
-                border: isDevModeOpen ? '2px solid #4a4a4a' : '1px solid #2a2a2a',
-                background: isDevModeOpen
-                  ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%)'
-                  : 'rgba(30, 30, 30, 0.9)',
-                color: isDevModeOpen ? '#e6e6e6' : '#bbb',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                boxShadow: isDevModeOpen
-                  ? '0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.1)'
-                  : '0 2px 8px rgba(0,0,0,0.3)',
-                transition: 'all 200ms ease',
-              }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M8 16L4 12L8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M16 8L20 12L16 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+              {/* Icon + value (no "Credits" text) */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                  <circle cx="12" cy="12" r="9.5" stroke="#8a8a8a" strokeWidth="2" />
+                  <text x="12" y="12" textAnchor="middle" dominantBaseline="middle" alignmentBaseline="middle" fontSize="12" fill="#8a8a8a" fontWeight="700">c</text>
                 </svg>
+                <span style={{
+                  color: '#e5e5e5',
+                  fontSize: 14,
+                  fontWeight: 400,
+                  lineHeight: '12px',
+                  minWidth: '24px',
+                  textAlign: 'left'
+                }}>
+                  {balanceLoading ? '—' : `${balance ?? '—'}`}
+                </span>
               </div>
-              <div style={{
-                color: '#4599DF',
-                fontSize: '14px',
-                fontWeight: '600',
-                lineHeight: '12px',
-                minWidth: '24px',
-                textAlign: 'left'
-              }}>
-                {balanceLoading ? '—' : `${balance ?? '—'}`}
-              </div>
+              {/* Divider */}
+              <div style={{ width: 1, height: 18, background: '#2a2a2a' }} />
+              {/* Subtle Upgrade label */}
+              <span style={{ color: '#4599DF', fontSize: '14px', fontWeight: 400 }}>Upgrade</span>
             </div>
             <AuthButton onAvatarClick={() => onToggleDevMode()} />
           </div>

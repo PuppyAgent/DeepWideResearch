@@ -11,6 +11,7 @@ import { useRouter } from 'next/navigation'
 import { useSession } from './context/SessionContext'
 import type { Message as UIMessage } from '../components/ChatMain'
 import { useUiMessages } from './hooks/useUiMessages'
+import { useAccountData } from './context/AccountDataContext'
  
 
 // Dynamically import ChatPanel (composes settings buttons and ChatInterface)
@@ -62,8 +63,7 @@ export default function Home() {
   const [isDevModeOpen, setIsDevModeOpen] = useState(false)
   const [isCreatingSession, setIsCreatingSession] = useState(false)
   const [showCreateSuccess, setShowCreateSuccess] = useState(false)
-  const [balance, setBalance] = useState<number | null>(null)
-  const [balanceLoading, setBalanceLoading] = useState(false)
+  const { balance, balanceLoading } = useAccountData()
   
   // 📜 Cache streaming history for each session (session_id -> streamingHistory[])
   const [sessionStreamingCache, setSessionStreamingCache] = useState<Record<string, string[]>>({})
@@ -130,30 +130,7 @@ export default function Home() {
   })
 
 
-  // Fetch credits balance
-  React.useEffect(() => {
-    let active = true
-    const loadBalance = async () => {
-      if (!session) { setBalance(null); return }
-      setBalanceLoading(true)
-      try {
-        const token = await getAccessToken()
-        const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-        const res = await fetch(`${apiBase}/api/credits/balance`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
-        })
-        if (!res.ok) throw new Error('Failed to load balance')
-        const data = await res.json()
-        if (active) setBalance(Number(data?.balance ?? 0))
-      } catch (e) {
-        if (active) setBalance(null)
-      } finally {
-        if (active) setBalanceLoading(false)
-      }
-    }
-    loadBalance()
-    return () => { active = false }
-  }, [session, getAccessToken])
+  // Balance now comes from AccountDataContext (single source of truth). No local fetching here.
 
   // Add debug info - show current parameter state
   React.useEffect(() => {

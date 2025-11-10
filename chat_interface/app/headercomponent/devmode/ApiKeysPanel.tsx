@@ -2,6 +2,8 @@
 
 import React from 'react'
 import { useAuth } from '../../supabase/SupabaseAuthProvider'
+import { useAccountData } from '../../context/AccountDataContext'
+import { PRIMARY_BUTTON_COLORS, getPrimaryButtonStyle } from './primaryButtonStyles'
 
 interface ApiKeyItem {
   id: string
@@ -18,9 +20,9 @@ interface ApiKeyItem {
 
 export default function ApiKeysPanel() {
   const { getAccessToken, session, supabase } = useAuth()
-  const [userPlan, setUserPlan] = React.useState<'free' | 'plus' | 'pro' | 'team'>('free')
+  const { plan, apiKeys, keysLoading, refreshApiKeys } = useAccountData()
+  const userPlan: 'free' | 'plus' | 'pro' | 'team' = (plan === 'enterprise' ? 'team' : plan)
   const [loading, setLoading] = React.useState(false)
-  const [planLoading, setPlanLoading] = React.useState(true)
   const [keys, setKeys] = React.useState<ApiKeyItem[]>([])
   const [expandedId, setExpandedId] = React.useState<string | null>(null)
   const [languageByKey, setLanguageByKey] = React.useState<Record<string, 'curl' | 'node' | 'python'>>({})
@@ -30,6 +32,27 @@ export default function ApiKeysPanel() {
   const [hoveredRowId, setHoveredRowId] = React.useState<string | null>(null)
   const [creating, setCreating] = React.useState(false)
   const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+
+  // cache helpers (localStorage with TTL)
+  const readCache = React.useCallback(<T,>(key: string, ttlMs: number): T | null => {
+    try {
+      const raw = typeof window !== 'undefined' ? localStorage.getItem(key) : null
+      if (!raw) return null
+      const obj = JSON.parse(raw) as { ts: number; value: T }
+      if (!obj || typeof obj.ts !== 'number') return null
+      if (Date.now() - obj.ts > ttlMs) return null
+      return obj.value
+    } catch {
+      return null
+    }
+  }, [])
+  const writeCache = React.useCallback(<T,>(key: string, value: T) => {
+    try {
+      if (typeof window === 'undefined') return
+      localStorage.setItem(key, JSON.stringify({ ts: Date.now(), value }))
+    } catch {}
+  }, [])
+  const KEYS_TTL = 2 * 60 * 1000 // 2 minutes
 
   const copyToClipboard = React.useCallback(async (text: string) => {
     try {
@@ -51,7 +74,16 @@ export default function ApiKeysPanel() {
     }
   }, [])
 
-  const fetchKeys = React.useCallback(async () => {
+  const fetchKeys = React.useCallback(async (force?: boolean) => {
+    const uid = session?.user?.id || ''
+    const cacheKey = uid ? `dwr_api_keys_${uid}` : 'dwr_api_keys'
+    if (!force) {
+      const cached = readCache<ApiKeyItem[]>(cacheKey, KEYS_TTL)
+      if (cached && Array.isArray(cached)) {
+        setKeys(cached)
+        return
+      }
+    }
     setLoading(true)
     try {
       const token = await getAccessToken()
@@ -62,13 +94,17 @@ export default function ApiKeysPanel() {
       })
       if (!res.ok) throw new Error(await res.text())
       const data = await res.json()
-      setKeys(data.keys || [])
+      const serverKeys: ApiKeyItem[] = Array.isArray(data?.keys) ? data.keys : []
+      // sanitize before caching (avoid storing api_key secrets)
+      const sanitized = serverKeys.map(({ api_key, ...rest }) => rest)
+      setKeys(serverKeys)
+      writeCache(cacheKey, sanitized)
     } catch (e) {
       console.warn('Failed to load keys', e)
     } finally {
       setLoading(false)
     }
-  }, [apiBase, getAccessToken])
+  }, [apiBase, getAccessToken, readCache, writeCache, session?.user?.id])
 
   const createKey = React.useCallback(async () => {
     if (creating) return
@@ -85,26 +121,14 @@ export default function ApiKeysPanel() {
       })
       if (!res.ok) throw new Error(await res.text())
       const data = await res.json()
-      const newItem: ApiKeyItem = {
-        id: data.id,
-        prefix: data.prefix,
-        name: data.name,
-        created_at: new Date().toISOString(),
-        last_used_at: undefined,
-        expires_at: data.expires_at,
-        revoked_at: null,
-        scopes: ['research:invoke'],
-        api_key: data.api_key
-      }
-      setKeys(prev => [newItem, ...prev])
       setExpandedId(data.id)
-      setTimeout(() => { fetchKeys().catch(() => {}) }, 1500)
+      setTimeout(() => { refreshApiKeys(true).catch(() => {}) }, 800)
     } catch (e) {
       console.warn('Failed to create key', e)
     } finally {
       setCreating(false)
     }
-  }, [apiBase, creating, getAccessToken, fetchKeys])
+  }, [apiBase, creating, getAccessToken, refreshApiKeys])
 
   const revokeKey = React.useCallback(async (id: string) => {
     try {
@@ -116,31 +140,14 @@ export default function ApiKeysPanel() {
         }
       })
       if (!res.ok) throw new Error(await res.text())
-      await fetchKeys()
+      await refreshApiKeys(true)
       if (expandedId === id) setExpandedId(null)
     } catch (e) {
       console.warn('Failed to revoke key', e)
     }
-  }, [apiBase, getAccessToken, fetchKeys, expandedId])
+  }, [apiBase, getAccessToken, refreshApiKeys, expandedId])
 
-  const fetchPlan = React.useCallback(async () => {
-    try {
-      setPlanLoading(true)
-      if (!supabase || !session?.user?.id) return
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('plan')
-        .eq('user_id', session.user.id)
-        .single()
-      if (!error && data && typeof data.plan === 'string') {
-        setUserPlan(data.plan as 'free' | 'plus' | 'pro' | 'team')
-      }
-    } catch (e) {
-      console.warn('Failed to load plan', e)
-    } finally {
-      setPlanLoading(false)
-    }
-  }, [supabase, session?.user?.id])
+  // No plan fetching here; use plan from AccountDataContext
 
   const gotoPlans = React.useCallback(() => {
     if (typeof window !== 'undefined') {
@@ -150,21 +157,11 @@ export default function ApiKeysPanel() {
   }, [])
 
   React.useEffect(() => {
-    fetchKeys().catch(() => {})
-    fetchPlan().catch(() => {})
-  }, [fetchKeys, fetchPlan])
+    // No auto-fetch; rely on AccountDataContext and explicit refresh button
+  }, [])
 
   // Splash while determining plan to avoid flashing wrong view
-  if (planLoading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200 }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-          <img src="/SimpleDWlogo.svg" alt="Deep Wide Research" width={40} height={40} style={{ opacity: 0.95 }} />
-          <div style={{ marginTop: 2, color: '#888', fontSize: 12 }}>Loading…</div>
-        </div>
-      </div>
-    )
-  }
+  // No splash – use already available context values
 
   // If user is on free plan, show upgrade prompt
   if (userPlan === 'free') {
@@ -341,8 +338,8 @@ export default function ApiKeysPanel() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
             <button
-              onClick={() => { Promise.resolve(fetchKeys()).catch(() => {}) }}
-              disabled={loading}
+              onClick={() => { Promise.resolve(refreshApiKeys(true)).catch(() => {}) }}
+              disabled={keysLoading}
               title="Refresh API keys usage"
               aria-label="Refresh API keys usage"
               style={{
@@ -350,9 +347,9 @@ export default function ApiKeysPanel() {
                 padding: '0 10px',
                 borderRadius: 6,
                 border: '1px solid #2a2a2a',
-                background: loading ? '#1a1a1a' : '#171717',
+                background: keysLoading ? '#1a1a1a' : '#171717',
                 color: '#d6d6d6',
-                cursor: loading ? 'progress' : 'pointer',
+                cursor: keysLoading ? 'progress' : 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
                 gap: 6
@@ -367,25 +364,25 @@ export default function ApiKeysPanel() {
                 strokeWidth='2' 
                 strokeLinecap='round' 
                 strokeLinejoin='round'
-                className={loading ? 'animate-spin' : ''}
+                className={keysLoading ? 'animate-spin' : ''}
               >
                 <path d='M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2'/>
               </svg>
-              <span style={{ fontSize: 12 }}>{loading ? 'Refreshing…' : 'Refresh'}</span>
+              <span style={{ fontSize: 12 }}>{keysLoading ? 'Refreshing…' : 'Refresh'}</span>
             </button>
           </div>
-          {loading && <div style={{ color: '#888', fontSize: '14px' }}>Loading...</div>}
-          {!loading && keys.length === 0 && (
+          {keysLoading && <div style={{ color: '#888', fontSize: '14px' }}>Loading...</div>}
+          {!keysLoading && apiKeys.length === 0 && (
             <div style={{ color: '#888', fontSize: '14px' }}>No keys yet.</div>
           )}
-          {!loading && keys.length > 0 && (
+          {!keysLoading && apiKeys.length > 0 && (
             <div style={{ border: '1px solid #2a2a2a', borderRadius: 10, overflow: 'hidden', background: '#121212' }}>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 64px 112px', padding: '10px 12px', color: '#9aa0a6', fontSize: 14, background: 'transparent' }}>
                 <div>Key</div>
                 <div style={{ textAlign: 'left' }}>Used</div>
                 <div style={{ textAlign: 'left' }}>Actions</div>
               </div>
-              {keys.map(k => {
+              {apiKeys.map(k => {
                 const expanded = expandedId === k.id
                 const lang = languageByKey[k.id] || 'curl'
                 const displayKey = k.api_key || `dwr_${k.prefix}_<SECRET>`
@@ -574,9 +571,36 @@ export default function ApiKeysPanel() {
             disabled={creating}
             title="Create new API key"
             aria-label="Create new API key"
-            style={{ height: 32, padding: '0 12px', borderRadius: 8, border: '1px solid rgba(34,197,94,0.6)', background: creating ? '#14532d' : 'linear-gradient(180deg, #22C55E 0%, #16A34A 100%)', color: '#0b1b10', fontWeight: 400, letterSpacing: 0.2, cursor: creating ? 'progress' : 'pointer', fontSize: 14, display: 'inline-flex', alignItems: 'center', boxShadow: 'none' }}
+            style={{
+              height: 32,
+              padding: '0 12px',
+              borderRadius: 6,
+              border: 'none',
+              background: creating ? '#16A34A' : '#22C55E',
+              color: '#ffffff',
+              fontWeight: 600,
+              fontSize: '13px',
+              cursor: creating ? 'progress' : 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              transition: 'background 0.2s ease, transform 0.2s ease',
+              boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+              opacity: creating ? 0.85 : 1
+            }}
+            onMouseEnter={(e) => {
+              if (!creating) e.currentTarget.style.background = '#16A34A'
+            }}
+            onMouseLeave={(e) => {
+              if (!creating) e.currentTarget.style.background = '#22C55E'
+            }}
           >
-            {creating ? 'Creating…' : 'Create a New key'}
+            {!creating && (
+              <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true' focusable='false'>
+                <path d='M12 5v14M5 12h14'/>
+              </svg>
+            )}
+            <span>{creating ? 'Creating…' : 'Create a New key'}</span>
           </button>
         </div>
       </div>

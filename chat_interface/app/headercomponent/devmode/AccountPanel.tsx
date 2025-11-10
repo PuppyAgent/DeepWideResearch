@@ -3,9 +3,11 @@
 import React from 'react'
 import { useAuth } from '../../supabase/SupabaseAuthProvider'
 import { PRIMARY_BUTTON_COLORS, getPrimaryButtonStyle } from './primaryButtonStyles'
+import { useAccountData } from '../../context/AccountDataContext'
 
 export default function AccountPanel() {
-  const { session, supabase, getAccessToken, signOut } = useAuth()
+  const { session, signOut } = useAuth()
+  const { plan, balance, balanceLoading, refreshBalance } = useAccountData()
 
   const email = session?.user?.email ?? '—'
   const userMeta = (session?.user?.user_metadata ?? {}) as Record<string, unknown>
@@ -14,12 +16,8 @@ export default function AccountPanel() {
     (typeof userMeta?.['full_name'] === 'string' && userMeta['full_name']) ||
     (email.includes('@') ? email.split('@')[0] : 'User')
   
-  // Credits/Plan state and helpers (migrated from CreditsPanel)
-  const [activePlan, setActivePlan] = React.useState<'free' | 'plus' | 'pro' | 'enterprise'>('free')
-  const [balance, setBalance] = React.useState<number | null>(null)
-  const [balanceLoading, setBalanceLoading] = React.useState(false)
-  const [renewalText, setRenewalText] = React.useState<string | null>(null)
-  const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+  // Plan/credits derived from context
+  const activePlan = plan
   const upgradeable = activePlan === 'free' || activePlan === 'plus'
   const ctaLabel = upgradeable ? 'Upgrade' : 'Manage'
   const formatNumber = (n: number) => n.toLocaleString()
@@ -47,94 +45,6 @@ export default function AccountPanel() {
     }
     return { customizedSources: true, apiSdk: true, support: '24/7 dedicated support' }
   }, [activePlan])
-  const formatDateTime = (iso: string) => {
-    try {
-      const d = new Date(iso)
-      const date = d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
-      const time = d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
-      return `${date} ${time}`
-    } catch {
-      return null
-    }
-  }
-  React.useEffect(() => {
-    try {
-      const saved = typeof window !== 'undefined' ? localStorage.getItem('dwr_active_plan') : null
-      if (saved === 'team') {
-        setActivePlan('enterprise')
-      } else if (saved === 'free' || saved === 'plus' || saved === 'pro' || saved === 'enterprise') {
-        setActivePlan(saved)
-      }
-    } catch {}
-  }, [])
-  const fetchPlan = React.useCallback(async () => {
-    try {
-      if (!supabase || !session?.user?.id) return
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('plan')
-        .eq('user_id', session.user.id)
-        .single()
-      if (!error && data && typeof data.plan === 'string') {
-        const rawPlan = data.plan as string
-        const mappedPlan = rawPlan === 'team' ? 'enterprise' : rawPlan
-        if (mappedPlan === 'free' || mappedPlan === 'plus' || mappedPlan === 'pro' || mappedPlan === 'enterprise') {
-          setActivePlan(mappedPlan)
-          try { localStorage.setItem('dwr_active_plan', mappedPlan) } catch {}
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to load plan', e)
-    }
-  }, [supabase, session?.user?.id])
-  const fetchRenewal = React.useCallback(async () => {
-    try {
-      if (!supabase || !session?.user?.id) return
-      const { data, error } = await supabase
-        .from('subscriptions')
-        .select('current_period_end, updated_at')
-        .eq('user_id', session.user.id)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-      if (!error && Array.isArray(data) && data.length > 0) {
-        const end = data[0]?.current_period_end as string | null | undefined
-        const txt = end ? formatDateTime(end) : null
-        setRenewalText(txt ? `Renews on ${txt}` : 'Renews monthly')
-      } else {
-        setRenewalText('Renews monthly')
-      }
-    } catch (e) {
-      console.warn('Failed to load renewal info', e)
-      setRenewalText('Renews monthly')
-    }
-  }, [supabase, session?.user?.id])
-  const fetchBalance = React.useCallback(async () => {
-    try {
-      if (!session?.user?.id) return
-      setBalanceLoading(true)
-      const token = await getAccessToken()
-      const res = await fetch(`${apiBase}/api/credits/balance`, {
-        headers: { 'Authorization': token ? `Bearer ${token}` : '' }
-      })
-      if (res.ok) {
-        const data = (await res.json()) as Record<string, unknown>
-        const raw = data?.['balance']
-        const numeric = typeof raw === 'number' ? raw : (typeof raw === 'string' ? Number(raw) : NaN)
-        setBalance(Number.isFinite(numeric) ? numeric : null)
-      }
-    } catch (e) {
-      console.warn('Failed to load balance', e)
-    } finally {
-      setBalanceLoading(false)
-    }
-  }, [apiBase, getAccessToken, session?.user?.id])
-  React.useEffect(() => {
-    fetchPlan().catch(() => {})
-    fetchRenewal().catch(() => {})
-  }, [fetchPlan, fetchRenewal])
-  React.useEffect(() => {
-    fetchBalance().catch(() => {})
-  }, [fetchBalance])
   const gotoPlans = React.useCallback(() => {
     if (typeof window !== 'undefined') {
       const event = new CustomEvent('navigate-to-plans')
@@ -224,7 +134,7 @@ export default function AccountPanel() {
                 {balanceLoading ? '…' : (typeof balance === 'number' ? formatNumber(balance) : '—')}
               </div>
               <button
-                onClick={() => { fetchBalance().catch(() => {}) }}
+                onClick={() => { refreshBalance().catch(() => {}) }}
                 disabled={balanceLoading}
                 aria-label='Refresh credits'
                 title='Refresh'
@@ -297,7 +207,12 @@ export default function AccountPanel() {
                   e.currentTarget.style.background = getMoreCreditsBaseBackground
                 }}
               >
-                {ctaLabel}
+                {upgradeable && (
+                  <svg width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true' focusable='false'>
+                    <path d='M12 19V5M5 12l7-7 7 7'/>
+                  </svg>
+                )}
+                <span>{ctaLabel}</span>
               </button>
             </div>
           </div>
