@@ -3,7 +3,7 @@
 import React, { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../supabase/SupabaseAuthProvider'
 
-export default function AuthButton() {
+export default function AuthButton({ onAvatarClick }: { onAvatarClick?: () => void } = {}) {
   const { session, signInWithProvider, signOut } = useAuth()
 
   // 未登录：显示登录按钮
@@ -17,12 +17,12 @@ export default function AuthButton() {
   }
 
   // 已登录：显示头像 + 菜单
-  return <UserAvatarMenu email={session.user.email || ''} onLogout={signOut} userMeta={session.user.user_metadata || {}} />
+  return <UserAvatarMenu email={session.user.email || ''} onLogout={signOut} userMeta={session.user.user_metadata || {}} onAvatarClick={onAvatarClick} />
 }
 
 type UserMeta = { name?: string; full_name?: string } & Record<string, unknown>
 
-function UserAvatarMenu({ email, onLogout, userMeta }: { email: string; onLogout: () => void; userMeta: UserMeta }) {
+function UserAvatarMenu({ email, onLogout, userMeta, onAvatarClick }: { email: string; onLogout: () => void; userMeta: UserMeta; onAvatarClick?: () => void }) {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement | null>(null)
 
@@ -42,7 +42,15 @@ function UserAvatarMenu({ email, onLogout, userMeta }: { email: string; onLogout
     <div ref={ref} style={{ position: 'relative', display: 'inline-flex' }}>
       <button
         title={email}
-        onClick={() => setOpen(v => !v)}
+        onClick={() => {
+          if (onAvatarClick) {
+            onAvatarClick()
+            // 如果需要完全禁用下拉菜单，确保其关闭
+            setOpen(false)
+          } else {
+            setOpen(v => !v)
+          }
+        }}
         style={avatarButtonStyle}
       >
         <span style={avatarInnerStyle}>{initial}</span>

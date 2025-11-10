@@ -1,8 +1,10 @@
 'use client'
 
 import React from 'react'
-import CreditsPanel from './devmode/CreditsPanel'
+import AccountPanel from './devmode/AccountPanel'
 import ApiKeysPanel from './devmode/ApiKeysPanel'
+import PlansPanel from './devmode/PlansPanel'
+import InformationSourcesPanel from './devmode/InformationSourcesPanel'
 
 interface DevModeButtonProps {
   isOpen: boolean
@@ -73,7 +75,7 @@ interface DevModePanelProps {
 export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
   const [isRendered, setIsRendered] = React.useState(false)
   const [animateIn, setAnimateIn] = React.useState(false)
-  const [activeTab, setActiveTab] = React.useState<'credits' | 'api-keys'>('credits')
+  const [activeTab, setActiveTab] = React.useState<'account' | 'api-keys' | 'plans' | 'sources'>('account')
 
   React.useEffect(() => {
     if (!isOpen) return
@@ -83,6 +85,21 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [isOpen, onClose])
+
+  React.useEffect(() => {
+    const handleNavigateToPlans = () => {
+      setActiveTab('plans')
+    }
+    const handleNavigateToApiKeys = () => {
+      setActiveTab('api-keys')
+    }
+    window.addEventListener('navigate-to-plans', handleNavigateToPlans)
+    window.addEventListener('navigate-to-api-keys', handleNavigateToApiKeys)
+    return () => {
+      window.removeEventListener('navigate-to-plans', handleNavigateToPlans)
+      window.removeEventListener('navigate-to-api-keys', handleNavigateToApiKeys)
+    }
+  }, [])
 
   React.useEffect(() => {
     if (isOpen) {
@@ -106,7 +123,7 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
 
   if (!isRendered) return null
 
-  const NavBtn = ({ id, label, icon }: { id: 'credits' | 'api-keys', label: string, icon?: React.ReactNode }) => (
+  const NavBtn = ({ id, label, icon }: { id: 'account' | 'api-keys' | 'plans' | 'sources', label: string, icon?: React.ReactNode }) => (
     <button
       onClick={() => setActiveTab(id)}
       className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-md transition-colors ${
@@ -141,30 +158,38 @@ export default function DevModePanel({ isOpen, onClose }: DevModePanelProps) {
         className={`fixed top-1/2 left-1/2 ${animateIn ? 'scale-100 opacity-100' : 'scale-[0.97] opacity-0'} -translate-x-1/2 -translate-y-1/2 w-[min(980px,96vw)] h-[720px] overflow-hidden bg-[linear-gradient(140deg,rgba(22,22,22,0.98)_0%,rgba(14,14,14,0.98)_100%)] border border-[#2a2a2a] rounded-2xl shadow-[0_24px_64px_rgba(0,0,0,0.55),0_0_0_1px_rgba(255,255,255,0.06)] transition-all`}
       >
         <div className='flex h-full text-[13px] text-[#D4D4D4]'>
-          <div className='w-56 h-full border-r border-[#2f2f2f] bg-transparent py-3'>
+          <div className='w-44 h-full border-r border-[#2f2f2f] bg-transparent py-3'>
             <nav className='space-y-0.5 px-2'>
-              <NavBtn id='credits' label='Credits' icon={<svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='12' r='10'/><path d='M8 12h8M8 16h5M8 8h8'/></svg>} />
+              <NavBtn id='account' label='Account' icon={<svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><circle cx='12' cy='8' r='4'/><path d='M4 22c0-4 4-7 8-7s8 3 8 7'/></svg>} />
               <NavBtn id='api-keys' label='API Keys' icon={<svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'>
                 <circle cx='7' cy='12' r='4'/>
                 <path d='M11 12h8'/>
                 <path d='M19 12v3'/>
                 <path d='M16 12v2'/>
               </svg>} />
+              <NavBtn id='sources' label='Sources' icon={<svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><rect x='3' y='3' width='7' height='7'/><rect x='14' y='3' width='7' height='7'/><rect x='14' y='14' width='7' height='7'/><rect x='3' y='14' width='7' height='7'/></svg>} />
+              <NavBtn id='plans' label='Plans' icon={<svg className='w-4 h-4' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round'><path d='M12 19V5M5 12l7-7 7 7'/></svg>} />
             </nav>
           </div>
 
           <div className='flex flex-col flex-1 pl-6 pr-4 py-6 overflow-y-auto min-h-0'>
             <div className='flex items-center justify-start mb-3'>
               <div className='text-[16px] font-semibold text-[#e6e6e6]'>
-                {activeTab === 'credits' ? 'Credits' : 'API Keys'}
+                {activeTab === 'account' ? 'Account' : activeTab === 'api-keys' ? 'API Keys' : activeTab === 'plans' ? 'Plans' : 'Sources'}
               </div>
             </div>
 
-            {activeTab === 'credits' && (
-              <CreditsPanel />
+            {activeTab === 'account' && (
+              <AccountPanel />
             )}
             {activeTab === 'api-keys' && (
               <ApiKeysPanel />
+            )}
+            {activeTab === 'plans' && (
+              <PlansPanel />
+            )}
+            {activeTab === 'sources' && (
+              <InformationSourcesPanel />
             )}
           </div>
         </div>

@@ -85,11 +85,6 @@ export default function MainHeaderBar({
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <div 
               data-dev-button
-              onClick={(e) => {
-                e.stopPropagation()
-                onToggleDevMode()
-              }}
-              title={isDevModeOpen ? 'Close Dev Mode' : 'Open Dev Mode'}
               style={{
                 height: '36px',
                 display: 'flex',
@@ -100,7 +95,7 @@ export default function MainHeaderBar({
                 border: '1px solid #2a2a2a',
                 background: 'rgba(20,20,20,0.9)',
                 backdropFilter: 'blur(8px)',
-                cursor: 'pointer',
+                cursor: 'default',
                 transition: 'all 200ms ease'
               }}
               onMouseEnter={(e) => {
@@ -149,7 +144,7 @@ export default function MainHeaderBar({
                 {balanceLoading ? '—' : `${balance ?? '—'}`}
               </div>
             </div>
-            <AuthButton />
+            <AuthButton onAvatarClick={() => onToggleDevMode()} />
           </div>
         </div>
       </div>
