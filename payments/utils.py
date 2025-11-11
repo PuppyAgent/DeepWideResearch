@@ -38,193 +38,148 @@ _jwks_cache: Optional[Dict[str, Any]] = None
 POLAR_ACCESS_TOKEN = os.getenv("POLAR_ACCESS_TOKEN")
 POLAR_API_BASE = os.getenv("POLAR_API_BASE") or "https://api.polar.sh"
 
-def _polar_headers() -> Dict[str, str]:
-    if not POLAR_ACCESS_TOKEN:
-        raise HTTPException(status_code=500, detail="Server misconfigured: POLAR_ACCESS_TOKEN not set")
-    return {
-        "Authorization": f"Bearer {POLAR_ACCESS_TOKEN}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-
-def _polar_request(method: str, path: str, *, params: Optional[Dict[str, Any]] = None, json_body: Optional[Dict[str, Any]] = None, timeout: int = 8):
-    """Perform a Polar API request with DNS fallback.
-    If POLAR_API_BASE points to sandbox and DNS fails, retry once against production base.
-    """
-    base = (POLAR_API_BASE or "https://api.polar.sh").rstrip('/')
-    url = f"{base}{path}"
+def _mask_token(value: Optional[str]) -> str:
+    if not value:
+        return "None"
     try:
-        return requests.request(method.upper(), url, headers=_polar_headers(), params=params, json=json_body, timeout=timeout)
-    except requests.exceptions.RequestException as e:
-        # DNS failover only when sandbox base is used
-        try:
-            is_dns = any(kw in str(e) for kw in ("NameResolutionError", "Failed to resolve", "gaierror"))
-            if is_dns and ("sandbox" in base):
-                try:
-                    logger.warning("polar_request: DNS failed for sandbox, retrying with production base")
-                except Exception:
-                    ...
-                fallback_base = "https://api.polar.sh"
-                url2 = f"{fallback_base}{path}"
-                return requests.request(method.upper(), url2, headers=_polar_headers(), params=params, json=json_body, timeout=timeout)
-        except Exception:
-            ...
-        raise
+        n = len(value)
+        if n <= 8:
+            return (value[:2] + "***" + value[-2:]) if n >= 4 else "***"
+        return value[:4] + "..." + value[-4:]
+    except Exception:
+        return "***"
+
+try:
+    msg = f"[payments] POLAR_ACCESS_TOKEN (masked) = {_mask_token(POLAR_ACCESS_TOKEN)}"
+    print(msg)
+    logger.info(msg)
+except Exception:
+    ...
 
 def _polar_sdk_client():
     try:
         from polar_sdk import Polar  # type: ignore
         if not POLAR_ACCESS_TOKEN:
             return None
-        return Polar(access_token=POLAR_ACCESS_TOKEN)
+        # Try to honor custom base URL if provided (e.g., sandbox)
+        base = POLAR_API_BASE
+        try:
+            return Polar(access_token=POLAR_ACCESS_TOKEN, server_url=base)  # type: ignore[call-arg]
+        except TypeError:
+            try:
+                return Polar(access_token=POLAR_ACCESS_TOKEN, server=base)  # type: ignore[call-arg]
+            except TypeError:
+                return Polar(access_token=POLAR_ACCESS_TOKEN)
     except Exception:
         return None
 
 def polar_get_customer_by_email(email: str, timeout: int = 8) -> Optional[str]:
     try:
-        resp = _polar_request("GET", "/v1/customers", params={"email": email}, timeout=timeout)
-        if not resp.ok:
-            try:
-                logger.warning("polar_get_customer_by_email: status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", ""))
-            except Exception:
-                ...
-            return None
-        data = resp.json()
-        # Accept either {items:[{id:...}]} or list
-        items = data.get("items") if isinstance(data, dict) else (data if isinstance(data, list) else [])
-        if isinstance(items, list) and items:
-            cid = items[0].get("id")
-            return str(cid) if cid else None
+        # SDK method signature compatibility varies; for our simplified flow we don't require this lookup.
+        return None
     except Exception:
-        try:
-            logger.exception("polar_get_customer_by_email: error")
-        except Exception:
-            ...
-    return None
+        return None
 
 def polar_list_active_subscriptions(customer_id: str, timeout: int = 8) -> Dict[str, Any]:
     try:
-        resp = _polar_request("GET", "/v1/subscriptions", params={"customer_id": customer_id, "status": "active"}, timeout=timeout)
-        if not resp.ok:
-            try:
-                logger.warning("polar_list_active_subscriptions: status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", ""))
-            except Exception:
-                ...
-            return {"items": []}
-        data = resp.json()
-        return data if isinstance(data, dict) else {"items": data if isinstance(data, list) else []}
+        client = _polar_sdk_client()
+        if client is None:
+            raise HTTPException(status_code=500, detail="Server misconfigured: Polar SDK not available")
+        with client as polar:
+            res = polar.subscriptions.list(request={"customer_id": customer_id, "status": "active"})  # type: ignore[attr-defined]
+        items = None
+        try:
+            items = getattr(res, "items", None)  # type: ignore[attr-defined]
+        except Exception:
+            items = None
+        if items is None and isinstance(res, dict):
+            items = res.get("items")
+        if isinstance(items, list):
+            return {"items": items}
+        return {"items": []}
+    except HTTPException:
+        raise
     except Exception:
         try:
-            logger.exception("polar_list_active_subscriptions: error")
+            logger.exception("polar_list_active_subscriptions (sdk): error")
         except Exception:
             ...
         return {"items": []}
 
-def polar_update_subscription_price(subscription_id: str, price_id: Optional[str] = None, product_id: Optional[str] = None, timeout: int = 10) -> bool:
+def polar_update_subscription_product(subscription_id: str, product_id: str, timeout: int = 10) -> bool:
+    """Update a subscription to a new product via Polar SDK (product-only)."""
     try:
-        payload: Dict[str, Any] = {}
-        if price_id:
-            payload["price_id"] = price_id
-        if product_id:
-            payload["product_id"] = product_id
-        if not payload:
-            return False
-        resp = _polar_request("POST", f"/v1/subscriptions/{subscription_id}/update", json_body=payload, timeout=timeout)
-        ok = bool(getattr(resp, "ok", False))
-        if not ok:
-            try:
-                logger.warning("polar_update_subscription_price: status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", ""))
-            except Exception:
-                ...
-        return ok
+        client = _polar_sdk_client()
+        if client is None:
+            raise HTTPException(status_code=500, detail="Server misconfigured: Polar SDK not available")
+        with client as polar:
+            res = polar.subscriptions.update(  # type: ignore[attr-defined]
+                subscription_id=subscription_id,
+                request={"product_id": product_id, "proration_behavior": "immediate"},
+            )
+        return True if res is not None else False
+    except HTTPException:
+        raise
     except Exception:
         try:
-            logger.exception("polar_update_subscription_price: error")
+            logger.exception("polar_update_subscription_product (sdk): error")
         except Exception:
             ...
         return False
 
 def polar_cancel_subscription(subscription_id: str, at_period_end: bool = False, timeout: int = 10) -> bool:
     try:
-        payload = {"at_period_end": bool(at_period_end)}
-        resp = _polar_request("POST", f"/v1/subscriptions/{subscription_id}/cancel", json_body=payload, timeout=timeout)
-        ok = bool(getattr(resp, "ok", False))
-        if not ok:
-            try:
-                logger.warning("polar_cancel_subscription: status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", ""))
-            except Exception:
-                ...
-        return ok
+        client = _polar_sdk_client()
+        if client is None:
+            raise HTTPException(status_code=500, detail="Server misconfigured: Polar SDK not available")
+        with client as polar:
+            res = polar.subscriptions.cancel(  # type: ignore[attr-defined]
+                subscription_id=subscription_id,
+                request={"at_period_end": bool(at_period_end)},
+            )
+        return True if res is not None else False
+    except HTTPException:
+        raise
     except Exception:
         try:
-            logger.exception("polar_cancel_subscription: error")
+            logger.exception("polar_cancel_subscription (sdk): error")
         except Exception:
             ...
         return False
 
-def polar_create_checkout(product_id: Optional[str] = None, price_id: Optional[str] = None, customer_email: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None, success_url: Optional[str] = None, timeout: int = 10) -> Optional[str]:
+def polar_create_checkout(product_id: str, customer_email: Optional[str] = None, metadata: Optional[Dict[str, Any]] = None, success_url: Optional[str] = None, timeout: int = 10) -> Optional[str]:
     try:
-        # Prefer official SDK if available
         client = _polar_sdk_client()
-        if client is not None:
-            try:
-                req: Dict[str, Any] = {}
-                if product_id:
-                    req["products"] = [product_id]
-                if price_id:
-                    # Some SDKs accept prices list; fall back to products elsewhere
-                    req["prices"] = [price_id]
-                if customer_email:
-                    req["customer_email"] = customer_email
-                if metadata:
-                    req["metadata"] = metadata
-                if success_url:
-                    req["success_url"] = success_url
-                with client as polar:
-                    res = polar.checkouts.create(request=req)  # type: ignore[attr-defined]
-                # Try common access patterns
-                url = None
-                try:
-                    url = getattr(res, "url", None)
-                except Exception:
-                    url = None
-                if not url and isinstance(res, dict):
-                    url = res.get("url") or res.get("checkout_url")
-                if url:
-                    return str(url)
-            except Exception:
-                try:
-                    logger.warning("polar_create_checkout (sdk) failed; falling back to REST")
-                except Exception:
-                    ...
-        payload: Dict[str, Any] = {}
-        if product_id:
-            payload["product_id"] = product_id
-        if price_id:
-            payload["price_id"] = price_id
+        if client is None:
+            raise HTTPException(status_code=500, detail="Server misconfigured: Polar SDK not available")
+        req: Dict[str, Any] = {}
+        req["products"] = [product_id]
         if customer_email:
-            payload["customer_email"] = customer_email
+            req["customer_email"] = customer_email
         if metadata:
-            payload["metadata"] = metadata
+            req["metadata"] = metadata
         if success_url:
-            payload["success_url"] = success_url
-        resp = _polar_request("POST", "/v1/checkouts", json_body=payload, timeout=timeout)
-        if not getattr(resp, "ok", False):
-            try:
-                logger.warning("polar_create_checkout: status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", ""))
-            except Exception:
-                ...
-            return None
-        data = resp.json()
-        # Accept 'url' or 'checkout_url'
-        checkout_url = (data.get("url") or data.get("checkout_url")) if isinstance(data, dict) else None
-        return str(checkout_url) if checkout_url else None
+            req["success_url"] = success_url
+        with client as polar:
+            res = polar.checkouts.create(request=req)  # type: ignore[attr-defined]
+        url = None
+        try:
+            url = getattr(res, "url", None)
+        except Exception:
+            url = None
+        if not url and isinstance(res, dict):
+            url = res.get("url") or res.get("checkout_url")
+        if not url:
+            raise HTTPException(status_code=502, detail="Failed to create checkout URL via Polar SDK")
+        return str(url)
+    except HTTPException:
+        raise
     except Exception:
         try:
-            logger.exception("polar_create_checkout: error")
+            logger.exception("polar_create_checkout (sdk) error")
         except Exception:
             ...
-        return None
+        raise HTTPException(status_code=502, detail="Polar SDK checkout failed")
 
 def get_email_by_user_id(user_id: str) -> Optional[str]:
     # Try profiles table first
@@ -257,6 +212,22 @@ def get_email_by_user_id(user_id: str) -> Optional[str]:
     except Exception:
         try:
             logger.exception("get_email_by_user_id: admin lookup error")
+        except Exception:
+            ...
+    return None
+
+def get_profile_plan(user_id: str) -> Optional[str]:
+    """Fetch current plan from Supabase profiles by user_id."""
+    try:
+        resp = _supabase_rest_get("/rest/v1/profiles", params={"user_id": f"eq.{user_id}", "select": "plan", "limit": "1"})
+        if getattr(resp, "ok", False):
+            arr = resp.json()
+            if isinstance(arr, list) and arr:
+                plan = arr[0].get("plan")
+                return str(plan).lower() if plan else None
+    except Exception:
+        try:
+            logger.exception("get_profile_plan: profiles lookup error")
         except Exception:
             ...
     return None
@@ -413,6 +384,38 @@ def update_subscription(user_id: str, provider: str, status: Optional[str], curr
     except Exception as e:
         logger.warning(f"Failed to upsert subscription: {e}")
 
+def get_active_polar_subscription_id(user_id: str) -> Optional[str]:
+    """Fetch active Polar subscription_id for a user from Supabase subscriptions table."""
+    try:
+        resp = _supabase_rest_get(
+            "/rest/v1/subscriptions",
+            params={
+                "user_id": f"eq.{user_id}",
+                "provider": "eq.polar",
+                "status": "eq.active",
+                "select": "metadata",
+                "limit": "1",
+            },
+        )
+        if getattr(resp, "ok", False):
+            arr = resp.json()
+            if isinstance(arr, list) and arr:
+                meta = arr[0].get("metadata") or {}
+                if isinstance(meta, str):
+                    try:
+                        meta = json.loads(meta)
+                    except Exception:
+                        meta = {}
+                sub_id = None
+                if isinstance(meta, dict):
+                    sub_id = meta.get("subscription_id") or (meta.get("subscription") or {}).get("id")
+                return str(sub_id) if sub_id else None
+    except Exception:
+        try:
+            logger.exception("get_active_polar_subscription_id: error")
+        except Exception:
+            ...
+    return None
 def update_profile_plan(user_id: str, plan: str) -> None:
     try:
         try:
@@ -635,22 +638,16 @@ def _load_plan_credits_mapping(force: bool = False) -> Dict[str, int]:
         return _plan_credits_cache.get("data", {})
     return _parse_plan_credits_json(POLAR_PLAN_CREDITS_JSON)
 
-def resolve_plan_credits(product_id: Optional[str] = None, price_id: Optional[str] = None) -> Optional[int]:
+def resolve_plan_credits(product_id: Optional[str] = None) -> Optional[int]:
     mapping = _load_plan_credits_mapping()
     if not mapping:
         return None
-    if price_id:
-        if price_id in mapping:
-            return mapping[price_id]
-        ns_key = f"price:{price_id}"
-        if ns_key in mapping:
-            return mapping[ns_key]
     if product_id and product_id in mapping:
         return mapping[product_id]
     return None
 
-def determine_units_for_purchase(product_id: Optional[str], price_id: Optional[str], plan_hint: Optional[str]) -> int:
-    units = resolve_plan_credits(product_id=product_id, price_id=price_id)
+def determine_units_for_purchase(product_id: Optional[str], plan_hint: Optional[str]) -> int:
+    units = resolve_plan_credits(product_id=product_id)
     if isinstance(units, int) and units > 0:
         return units
     plan = (plan_hint or "").strip().lower()
@@ -666,143 +663,34 @@ POLAR_WEBHOOK_SECRET = os.getenv("POLAR_WEBHOOK_SECRET")
 POLAR_WEBHOOK_DEBUG = os.getenv("POLAR_WEBHOOK_DEBUG", "0") not in ("0", "false", "False")
 
 def verify_polar_signature(req: Request, raw_body: bytes) -> None:
+    """Minimal verification:
+    - Require 'Webhook-Signature' header with format 'v1=<base64(hmac_sha256(ts + "." + body))>'
+    - Require 'Webhook-Timestamp' header within 300s window
+    """
     if not POLAR_WEBHOOK_SECRET:
         return
-    # Accept multiple possible header names used by providers / proxies
-    possible_header_names = [
-        "Polar-Webhook-Signature",
-        "polar-webhook-signature",
-        "POLAR-WEBHOOK-SIGNATURE",
-        "Polar-Signature",
-        "polar-signature",
-        "POLAR-SIGNATURE",
-        "X-Polar-Signature",
-        "x-polar-signature",
-        "X-POLAR-SIGNATURE",
-        "webhook-signature",
-    ]
-    sig = None
-    used_header_name = None
-    for name in possible_header_names:
-        sig = req.headers.get(name)
-        if sig:
-            used_header_name = name
-            break
-    if not sig:
-        if POLAR_WEBHOOK_DEBUG:
-            try:
-                logger.warning("[polar_signature] header not found. Incoming headers: %s", dict(req.headers))
-            except Exception:
-                pass
-        raise HTTPException(status_code=403, detail="Missing Polar signature header")
-
-    # Normalize candidate signature
-    header_sig_raw = sig.strip().strip('"\'')
-    header_sig_lower = header_sig_raw.lower()
-    # Support formats like "sha256=abcdef..."
-    if "=" in header_sig_lower:
-        parts = header_sig_lower.split("=", 1)
-        if len(parts) == 2 and parts[1]:
-            header_sig_lower = parts[1]
-            header_sig_raw = parts[1]
-
-    # Compute digests (legacy over raw body)
-    mac = hmac.new(POLAR_WEBHOOK_SECRET.encode("utf-8"), raw_body, hashlib.sha256)
-    digest_hex = mac.hexdigest()
-    digest_bytes = mac.digest()
-    digest_b64_std = base64.b64encode(digest_bytes).decode("utf-8").strip()
-    digest_b64_url = base64.urlsafe_b64encode(digest_bytes).decode("utf-8").strip().rstrip("=")
-
-    # Compute digests with timestamp scheme(s)
-    ts = req.headers.get("webhook-timestamp") or req.headers.get("Webhook-Timestamp")
-    wid = req.headers.get("webhook-id") or req.headers.get("Webhook-Id")
-    digest_ts_b64_std = None
-    digest_ts_b64_url = None
-    digest_idts_b64_std = None
-    digest_idts_b64_url = None
-    digest_tsid_b64_std = None
-    digest_tsid_b64_url = None
-    if ts is not None:
-        try:
-            msg1 = (str(ts).strip()).encode("utf-8") + b"." + (raw_body or b"")
-            mac_ts = hmac.new(POLAR_WEBHOOK_SECRET.encode("utf-8"), msg1, hashlib.sha256)
-            digest_ts_b64_std = base64.b64encode(mac_ts.digest()).decode("utf-8").strip()
-            digest_ts_b64_url = base64.urlsafe_b64encode(mac_ts.digest()).decode("utf-8").strip().rstrip("=")
-        except Exception:
-            digest_ts_b64_std = None
-            digest_ts_b64_url = None
-        if wid:
-            try:
-                msg2 = (wid.strip()).encode("utf-8") + b"." + (str(ts).strip()).encode("utf-8") + b"." + (raw_body or b"")
-                mac_idts = hmac.new(POLAR_WEBHOOK_SECRET.encode("utf-8"), msg2, hashlib.sha256)
-                digest_idts_b64_std = base64.b64encode(mac_idts.digest()).decode("utf-8").strip()
-                digest_idts_b64_url = base64.urlsafe_b64encode(mac_idts.digest()).decode("utf-8").strip().rstrip("=")
-            except Exception:
-                digest_idts_b64_std = None
-                digest_idts_b64_url = None
-            try:
-                msg3 = (str(ts).strip()).encode("utf-8") + b"." + (wid.strip()).encode("utf-8") + b"." + (raw_body or b"")
-                mac_tsid = hmac.new(POLAR_WEBHOOK_SECRET.encode("utf-8"), msg3, hashlib.sha256)
-                digest_tsid_b64_std = base64.b64encode(mac_tsid.digest()).decode("utf-8").strip()
-                digest_tsid_b64_url = base64.urlsafe_b64encode(mac_tsid.digest()).decode("utf-8").strip().rstrip("=")
-            except Exception:
-                digest_tsid_b64_std = None
-                digest_tsid_b64_url = None
-
-    valid = False
-    # Accept lowercase hex compare
-    if hmac.compare_digest(header_sig_lower, digest_hex):
-        valid = True
-    # Accept uppercase hex
-    if not valid and hmac.compare_digest(header_sig_raw.upper(), digest_hex.upper()):
-        valid = True
-    # Accept standard base64
-    if not valid and hmac.compare_digest(header_sig_raw, digest_b64_std):
-        valid = True
-    # Accept urlsafe base64 (with and without padding)
-    if not valid and (
-        hmac.compare_digest(header_sig_raw, digest_b64_url)
-        or hmac.compare_digest(header_sig_raw.rstrip("="), digest_b64_std.rstrip("=") )
-    ):
-        valid = True
-
-    # Accept Polar v1 timestamp scheme in 'webhook-signature': 'v1,<b64>' or 'v1=<b64>'
-    if not valid and used_header_name and used_header_name.lower() == "webhook-signature":
-        provided = header_sig_raw
-        if "," in provided:
-            provided = provided.split(",", 1)[1].strip()
-        elif "=" in provided:
-            provided = provided.split("=", 1)[1].strip()
-        # Compare against all timestamp-based candidates
-        candidates = [
-            digest_ts_b64_std, digest_ts_b64_url,
-            digest_idts_b64_std, digest_idts_b64_url,
-            digest_tsid_b64_std, digest_tsid_b64_url,
-        ]
-        for cand in candidates:
-            if cand and hmac.compare_digest(provided.rstrip("="), cand.rstrip("=")):
-                valid = True
-                break
-
-    if POLAR_WEBHOOK_DEBUG and not valid:
-        logger.warning(
-            "[polar_signature] mismatch: headerName=%s headerVal=%s hex=%s b64=%s b64url=%s ts_b64=%s ts_b64url=%s idts_b64=%s idts_b64url=%s tsid_b64=%s tsid_b64url=%s ts=%s id=%s",
-            used_header_name,
-            header_sig_raw[:128],
-            (digest_hex or '')[:64],
-            (digest_b64_std or '')[:64],
-            (digest_b64_url or '')[:64],
-            (digest_ts_b64_std or '')[:64],
-            (digest_ts_b64_url or '')[:64],
-            (digest_idts_b64_std or '')[:64],
-            (digest_idts_b64_url or '')[:64],
-            (digest_tsid_b64_std or '')[:64],
-            (digest_tsid_b64_url or '')[:64],
-            str(ts),
-            str(wid)
-        )
-
-    if not valid:
+    sig = req.headers.get("Webhook-Signature")
+    ts = req.headers.get("Webhook-Timestamp")
+    if not sig or not ts:
+        raise HTTPException(status_code=403, detail="Missing webhook signature or timestamp")
+    provided = sig.strip().strip('"\'')
+    if provided.startswith("v1="):
+        provided = provided[3:].strip()
+    elif provided.startswith("v1,"):
+        provided = provided[3:].strip()
+    # Timestamp window check (±300s)
+    try:
+        ts_val = int(str(ts).strip())
+    except Exception:
+        raise HTTPException(status_code=403, detail="Invalid webhook timestamp")
+    now = int(datetime.now(timezone.utc).timestamp())
+    if abs(now - ts_val) > 300:
+        raise HTTPException(status_code=403, detail="Stale webhook timestamp")
+    # Compute expected signature
+    msg = (str(ts_val).encode("utf-8")) + b"." + (raw_body or b"")
+    digest = hmac.new(POLAR_WEBHOOK_SECRET.encode("utf-8"), msg, hashlib.sha256).digest()
+    expected = base64.b64encode(digest).decode("utf-8").strip()
+    if not hmac.compare_digest(provided, expected):
         raise HTTPException(status_code=403, detail="Invalid webhook signature")
 
 

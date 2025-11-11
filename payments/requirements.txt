@@ -4,4 +4,5 @@ python-jose[cryptography]>=3.3.0
 requests>=2.32.3
 python-dotenv>=1.0.0
 pydantic>=2.7.1
+polar-sdk
 

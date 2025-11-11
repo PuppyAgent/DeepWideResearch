@@ -126,9 +126,11 @@ export default function MainHeaderBar({
             >
               {/* Icon + value (no "Credits" text) */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
-                  <circle cx="12" cy="12" r="9.5" stroke="#8a8a8a" strokeWidth="2" />
-                  <text x="12" y="12" textAnchor="middle" dominantBaseline="middle" alignmentBaseline="middle" fontSize="12" fill="#8a8a8a" fontWeight="700">c</text>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+                  <path
+                    d="M13 4L6 14H12L11 20L18 10H12L13 4Z"
+                    fill="#8a8a8a"
+                  />
                 </svg>
                 <span style={{
                   color: '#e5e5e5',

@@ -5,7 +5,7 @@ import { useAuth } from '../../supabase/SupabaseAuthProvider'
 import { PRIMARY_BUTTON_COLORS, getPrimaryButtonStyle } from './primaryButtonStyles'
 
 export default function PlansPanel() {
-  const { session, supabase } = useAuth()
+  const { session, supabase, getAccessToken } = useAuth()
   const [activePlan, setActivePlan] = React.useState<'free' | 'plus' | 'pro' | 'enterprise'>('free')
 
   const productId15 = process.env.NEXT_PUBLIC_POLAR_PRODUCT_ID_15
@@ -103,6 +103,60 @@ export default function PlansPanel() {
     }
   }, [session?.user?.email, session?.user?.id])
 
+  // Prefer server-side upgrade flow (handles existing subscriptions) and fallback to Next route
+  const paymentsApiBase = React.useMemo(() => {
+    const base =
+      (process.env.NEXT_PUBLIC_PAYMENTS_API_URL || process.env.NEXT_PUBLIC_API_URL || '').trim()
+    return base.endsWith('/') ? base.slice(0, -1) : base
+  }, [])
+
+  const startPurchaseOrUpgrade = React.useCallback(
+    async (target: 'plus' | 'pro', productId?: string | null) => {
+      try {
+        const token = await getAccessToken()
+        if (paymentsApiBase && token) {
+          const resp = await fetch(`${paymentsApiBase}/api/polar/upgrade`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ target }),
+          })
+          const data: any = await resp.json().catch(() => ({}))
+          if (resp.ok) {
+            if ((data?.checkout_url || data?.mode === 'checkout')) {
+              // Only allow checkout fallback for free -> paid
+              if (activePlan === 'free') {
+                try { localStorage.setItem('dwr_pending_plan', target) } catch {}
+                if (data?.checkout_url) {
+                  window.location.href = String(data.checkout_url)
+                } else {
+                  gotoCheckout(productId, target)
+                }
+              } else {
+                alert('无法直接升级，请稍后再试或联系支持。')
+              }
+              return
+            }
+            // Direct upgrade (no checkout needed)
+            try { localStorage.setItem('dwr_active_plan', target) } catch {}
+            alert(target === 'pro' ? '已升级到 Pro 计划' : '已切换到 Plus 计划')
+            await fetchPlan()
+            return
+          }
+        }
+      } catch {}
+      // Fallback to Next.js adapter route only for free -> paid
+      if (activePlan === 'free') {
+        gotoCheckout(productId, target)
+      } else {
+        alert('无法直接升级，请稍后再试或联系支持。')
+      }
+    },
+    [paymentsApiBase, getAccessToken, gotoCheckout, fetchPlan, activePlan]
+  )
+
   React.useEffect(() => {
     fetchPlan().catch(() => {})
   }, [fetchPlan])
@@ -161,7 +215,7 @@ export default function PlansPanel() {
             {(activePlan !== 'plus' && activePlan !== 'pro' && activePlan !== 'enterprise') && (
               <button
                 type='button'
-                onClick={() => gotoCheckout(resolvedProductId15, 'plus')}
+                onClick={() => startPurchaseOrUpgrade('plus', resolvedProductId15)}
                 disabled={plusButtonDisabled}
                 style={getPrimaryButtonStyle({ disabled: plusButtonDisabled, fullWidth: true })}
                 onMouseEnter={(e) => {
@@ -207,7 +261,7 @@ export default function PlansPanel() {
             {(activePlan !== 'pro' && activePlan !== 'enterprise') && (
               <button
                 type='button'
-                onClick={() => gotoCheckout(resolvedProductId100, 'pro')}
+                onClick={() => startPurchaseOrUpgrade('pro', resolvedProductId100)}
                 disabled={proButtonDisabled}
                 style={getPrimaryButtonStyle({ disabled: proButtonDisabled, fullWidth: true })}
                 onMouseEnter={(e) => {
