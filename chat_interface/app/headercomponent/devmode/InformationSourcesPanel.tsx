@@ -22,27 +22,12 @@ export default function InformationSourcesPanel() {
   const [done, setDone] = React.useState(false)
   const [err, setErr] = React.useState<string | null>(null)
 
-  const onJoin = async () => {
-    setErr(null)
-    const email = typeof window !== 'undefined' ? window.prompt('Leave your email to join the waiting list:') : ''
-    if (!email) return
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setErr('Invalid email format')
-      return
-    }
-    setBusy(true)
+  const onJoin = () => {
+    const url = 'https://cal.com/guantum/for-users'
     try {
-      const res = await fetch('/api/waitinglist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, sources: [] })
-      })
-      if (!res.ok) throw new Error(await res.text())
-      setDone(true)
-    } catch (e) {
-      setErr('Submission failed, please try again')
-    } finally {
-      setBusy(false)
+      window.location.href = url
+    } catch {
+      try { window.open(url, '_blank', 'noopener') } catch {}
     }
   }
 
@@ -70,7 +55,7 @@ export default function InformationSourcesPanel() {
               marginBottom: '12px',
               lineHeight: '1.3'
             }}>
-              Connect 100+ information sources
+              Connect 100 information sources
             </h3>
             <p style={{ 
               fontSize: '13px', 

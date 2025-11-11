@@ -25,27 +25,12 @@ export default function AddSourcePanel({ open, onClose }: AddSourcePanelProps) {
   const [done, setDone] = React.useState(false)
   const [err, setErr] = React.useState<string | null>(null)
 
-  const onJoin = async () => {
-    setErr(null)
-    const email = typeof window !== 'undefined' ? window.prompt('Leave your email to join the waiting list:') : ''
-    if (!email) return
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setErr('邮箱格式不正确')
-      return
-    }
-    setBusy(true)
+  const onJoin = () => {
+    const url = 'https://cal.com/guantum/for-users'
     try {
-      const res = await fetch('/api/waitinglist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, sources: [] })
-      })
-      if (!res.ok) throw new Error(await res.text())
-      setDone(true)
-    } catch (e) {
-      setErr('提交失败，请稍后再试')
-    } finally {
-      setBusy(false)
+      window.location.href = url
+    } catch {
+      try { window.open(url, '_blank', 'noopener') } catch {}
     }
   }
 
@@ -97,8 +82,8 @@ export default function AddSourcePanel({ open, onClose }: AddSourcePanelProps) {
           {/* Header */}
           <div style={{ textAlign: 'center' }}>
             <div style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
-              <div style={{ fontSize: '20px', fontWeight: 700, color: '#EDEDED' }}>Over 500 information sources via MCP</div>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: '#0B0B0B', background: '#FBBF24', borderRadius: '9999px', padding: '2px 8px', letterSpacing: '0.3px' }}>TEAM PLAN ONLY</span>
+              <div style={{ fontSize: '20px', fontWeight: 700, color: '#EDEDED' }}>100 information sources via MCP</div>
+              <span style={{ fontSize: '11px', fontWeight: 700, color: '#0B0B0B', background: '#FBBF24', borderRadius: '9999px', padding: '2px 8px', letterSpacing: '0.3px' }}>ENTERPRISE PLAN ONLY</span>
             </div>
             <div style={{ fontSize: '12px', color: '#9AA0A6', marginTop: '6px' }}>Members‑only · Early access</div>
           </div>
@@ -230,7 +215,6 @@ export default function AddSourcePanel({ open, onClose }: AddSourcePanelProps) {
               >
                 {busy ? 'Submitting…' : (done ? 'Joined ✓' : 'Join the waiting list')}
               </button>
-              <span style={{ fontSize: '11px', fontWeight: 700, color: '#0B0B0B', background: '#FBBF24', borderRadius: '9999px', padding: '2px 8px', letterSpacing: '0.3px' }}>20% OFF</span>
             </div>
             {err && <div style={{ textAlign: 'center', marginTop: '8px', fontSize: '12px', color: '#ef4444' }}>{err}</div>}
           </div>

@@ -474,127 +474,11 @@ def update_profile_plan(user_id: str, plan: str) -> None:
         except Exception:
             ...
 
-def update_profile_plan_by_email(email: str, plan: str) -> None:
-    if not email:
-        return
-    try:
-        try:
-            logger.info("update_profile_plan_by_email: start email=%s plan=%s", email, plan)
-        except Exception:
-            ...
-        resp = _supabase_rest_patch(f"/rest/v1/profiles?email=eq.{email}", {"plan": plan})
-        try:
-            logger.info(
-                "update_profile_plan_by_email: patch by email resp_ok=%s status=%s",
-                getattr(resp, "ok", None), getattr(resp, "status_code", None)
-            )
-        except Exception:
-            ...
-        if resp is not None and not getattr(resp, "ok", False):
-            try:
-                logger.warning("update_profile_plan_by_email: email filter patch failed status=%s body=%s", getattr(resp, "status_code", None), getattr(resp, "text", ""))
-            except Exception:
-                ...
-        applied = False
-        if resp is not None and getattr(resp, "ok", False):
-            try:
-                body = resp.json()
-                if isinstance(body, list) and len(body) > 0:
-                    applied = True
-                try:
-                    logger.info("update_profile_plan_by_email: patch by email returned %s row(s)", len(body) if isinstance(body, list) else None)
-                except Exception:
-                    ...
-            except Exception:
-                applied = True
-        try:
-            logger.info("update_profile_plan_by_email: applied_by_email=%s", applied)
-        except Exception:
-            ...
-        if not applied:
-            # Fallback: resolve user_id by email and try user_id update; if still not applied, upsert
-            try:
-                uid = find_user_by_email(email)
-            except Exception:
-                uid = None
-            try:
-                logger.info("update_profile_plan_by_email: resolved uid=%s from email", uid)
-            except Exception:
-                ...
-            if uid:
-                # Try user_id-based patch
-                update_profile_plan(uid, plan)
-                # Attempt to upsert profile row if it still does not exist
-                try:
-                    resp_upsert = _supabase_rest_post(
-                        "/rest/v1/profiles?on_conflict=user_id",
-                        {"user_id": uid, "email": email, "plan": plan},
-                    )
-                    try:
-                        logger.info(
-                            "update_profile_plan_by_email: upsert resp_ok=%s status=%s",
-                            getattr(resp_upsert, "ok", None), getattr(resp_upsert, "status_code", None)
-                        )
-                    except Exception:
-                        ...
-                except Exception:
-                    ...
-        # Post-check: read back plan snapshot for this email
-        try:
-            snap = _supabase_rest_get("/rest/v1/profiles", params={"email": f"eq.{email}", "select": "user_id,email,plan"})
-            if getattr(snap, "ok", False):
-                try:
-                    logger.info("update_profile_plan_by_email: post_check rows=%s body=%s", "?", snap.text[:256])
-                except Exception:
-                    ...
-        except Exception:
-            ...
-    except Exception:
-        try:
-            logger.exception("update_profile_plan_by_email: unexpected error")
-        except Exception:
-            ...
-
-def find_user_by_email(email: Optional[str]) -> Optional[str]:
-    if not email:
-        return None
-    try:
-        # 1) Try profiles table (if it stores email)
-        resp = _supabase_rest_get("/rest/v1/profiles", params={"email": f"eq.{email}", "select": "user_id"})
-        if resp.ok:
-            arr = resp.json()
-            if isinstance(arr, list) and arr:
-                uid = arr[0].get("user_id")
-                if uid:
-                    return str(uid)
-    except Exception:
-        try:
-            logger.exception("find_user_by_email: profiles lookup error")
-        except Exception:
-            ...
-    # 2) Fallback: Supabase Auth admin – find user by email
-    try:
-        if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
-            url = f"{SUPABASE_URL.rstrip('/')}/auth/v1/admin/users"
-            headers = {
-                "apikey": SUPABASE_SERVICE_ROLE_KEY,
-                "Authorization": f"Bearer {SUPABASE_SERVICE_ROLE_KEY}",
-            }
-            resp2 = requests.get(url, headers=headers, params={"email": email}, timeout=5)
-            if resp2.ok:
-                data = resp2.json()
-                users = data.get("users") if isinstance(data, dict) else (data if isinstance(data, list) else [])
-                if isinstance(users, list) and users:
-                    uid = users[0].get("id")
-                    if uid:
-                        return str(uid)
-    except Exception:
-        try:
-            logger.exception("find_user_by_email: admin lookup error")
-        except Exception:
-            ...
-        return None
-    return None
+#
+# Note: Deprecated email-based helpers removed:
+# - update_profile_plan_by_email
+# - find_user_by_email
+# All plan updates and user identification now use user_id exclusively for reliability and speed.
 
 
 # ===================== Plan → Credits Mapping =====================
@@ -669,8 +553,10 @@ def verify_polar_signature(req: Request, raw_body: bytes) -> None:
     """
     if not POLAR_WEBHOOK_SECRET:
         return
-    sig = req.headers.get("Webhook-Signature")
-    ts = req.headers.get("Webhook-Timestamp")
+    # Accept lower/upper-case header variants
+    sig = req.headers.get("Webhook-Signature") or req.headers.get("webhook-signature")
+    ts = req.headers.get("Webhook-Timestamp") or req.headers.get("webhook-timestamp")
+    wid = req.headers.get("Webhook-Id") or req.headers.get("webhook-id")
     if not sig or not ts:
         raise HTTPException(status_code=403, detail="Missing webhook signature or timestamp")
     provided = sig.strip().strip('"\'')
@@ -678,19 +564,63 @@ def verify_polar_signature(req: Request, raw_body: bytes) -> None:
         provided = provided[3:].strip()
     elif provided.startswith("v1,"):
         provided = provided[3:].strip()
-    # Timestamp window check (±300s)
+    # Timestamp window check (adjusted for sandbox tolerance)
     try:
         ts_val = int(str(ts).strip())
     except Exception:
         raise HTTPException(status_code=403, detail="Invalid webhook timestamp")
     now = int(datetime.now(timezone.utc).timestamp())
-    if abs(now - ts_val) > 300:
+    try:
+        base = (POLAR_API_BASE or "").lower()
+    except Exception:
+        base = ""
+    skew = 900 if ("api.polar.sh" in base and "sandbox" not in base) else 86400
+    if abs(now - ts_val) > skew:
         raise HTTPException(status_code=403, detail="Stale webhook timestamp")
-    # Compute expected signature
-    msg = (str(ts_val).encode("utf-8")) + b"." + (raw_body or b"")
-    digest = hmac.new(POLAR_WEBHOOK_SECRET.encode("utf-8"), msg, hashlib.sha256).digest()
-    expected = base64.b64encode(digest).decode("utf-8").strip()
-    if not hmac.compare_digest(provided, expected):
+    # Compute expected signatures (ts.body and body-only), accept std and urlsafe b64, ignore padding
+    def _b64(s: bytes) -> str:
+        return base64.b64encode(s).decode("utf-8").strip()
+    def _b64url(s: bytes) -> str:
+        return base64.urlsafe_b64encode(s).decode("utf-8").strip()
+    def _eq_b64(a: str, b: str) -> bool:
+        return hmac.compare_digest(a.rstrip("="), b.rstrip("="))
+    secret_bytes = POLAR_WEBHOOK_SECRET.encode("utf-8")
+    body_bytes = raw_body or b""
+    # Candidate 1: HMAC(ts + "." + body)
+    msg_ts = str(ts_val).encode("utf-8") + b"." + body_bytes
+    d_ts = hmac.new(secret_bytes, msg_ts, hashlib.sha256).digest()
+    cand_ts_std = _b64(d_ts)
+    cand_ts_url = _b64url(d_ts)
+    # Candidate 2: HMAC(body) for providers that sign body-only
+    d_body = hmac.new(secret_bytes, body_bytes, hashlib.sha256).digest()
+    cand_body_std = _b64(d_body)
+    cand_body_url = _b64url(d_body)
+    # Candidate 3/4: HMAC(id.ts.body) and HMAC(ts.id.body) if webhook id present
+    cands_extra = []
+    if wid:
+        try:
+            wid_b = str(wid).strip().encode("utf-8")
+            ts_b = str(ts_val).encode("utf-8")
+            msg_idts = wid_b + b"." + ts_b + b"." + body_bytes
+            d_idts = hmac.new(secret_bytes, msg_idts, hashlib.sha256).digest()
+            cands_extra.extend([_b64(d_idts), _b64url(d_idts)])
+            msg_tsid = ts_b + b"." + wid_b + b"." + body_bytes
+            d_tsid = hmac.new(secret_bytes, msg_tsid, hashlib.sha256).digest()
+            cands_extra.extend([_b64(d_tsid), _b64url(d_tsid)])
+        except Exception:
+            ...
+    # Also accept hex body digest as some setups send sha256=<hex>
+    d_hex = hmac.new(secret_bytes, body_bytes, hashlib.sha256).hexdigest()
+    # Accept if any candidate matches (ignoring padding)
+    ok = (
+        _eq_b64(provided, cand_ts_std)
+        or _eq_b64(provided, cand_ts_url)
+        or _eq_b64(provided, cand_body_std)
+        or _eq_b64(provided, cand_body_url)
+        or any(_eq_b64(provided, c) for c in cands_extra)
+        or hmac.compare_digest(provided.lower(), d_hex.lower())
+    )
+    if not ok:
         raise HTTPException(status_code=403, detail="Invalid webhook signature")
 
 

@@ -127,16 +127,11 @@ export default function PlansPanel() {
           const data = (await resp.json().catch(() => ({}))) as UpgradeResponse
           if (resp.ok) {
             if ((data.checkout_url || data.mode === 'checkout')) {
-              // Only allow checkout fallback for free -> paid
-              if (activePlan === 'free') {
-                try { localStorage.setItem('dwr_pending_plan', target) } catch {}
-                if (data.checkout_url) {
-                  window.location.href = String(data.checkout_url)
-                } else {
-                  gotoCheckout(productId, target)
-                }
+              try { localStorage.setItem('dwr_pending_plan', target) } catch {}
+              if (data.checkout_url) {
+                window.location.href = String(data.checkout_url)
               } else {
-                alert('无法直接升级，请稍后再试或联系支持。')
+                gotoCheckout(productId, target)
               }
               return
             }
@@ -148,12 +143,8 @@ export default function PlansPanel() {
           }
         }
       } catch {}
-      // Fallback to Next.js adapter route only for free -> paid
-      if (activePlan === 'free') {
-        gotoCheckout(productId, target)
-      } else {
-        alert('无法直接升级，请稍后再试或联系支持。')
-      }
+      // Fallback to Next.js adapter route
+      gotoCheckout(productId, target)
     },
     [paymentsApiBase, getAccessToken, gotoCheckout, fetchPlan, activePlan]
   )
@@ -301,7 +292,7 @@ export default function PlansPanel() {
               <div className='flex items-start gap-2'><span className='text-[#2CAC58]'>[✓]</span><span>SLA & compliance</span></div>
             </div>
             <a
-              href='mailto:guantum@puppyagent.com'
+              href='https://cal.com/guantum/for-users'
               style={getPrimaryButtonStyle({ fullWidth: true, variant: 'ghost' })}
               onMouseEnter={(e) => {
                 e.currentTarget.style.background = contactHoverBackground

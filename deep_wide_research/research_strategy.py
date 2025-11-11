@@ -22,7 +22,7 @@ try:
     from .providers import chat_complete
     from .mcp_client import get_registry
     from .newprompt import create_unified_research_prompt
-    from .context_utils import get_normalizer, _infer_service_from_tool
+    from .context_utils import extract_sources_from_result, _infer_service_from_tool
 except ImportError:
     # Try absolute import (direct execution or deployment environment)
     try:
@@ -399,8 +399,10 @@ async def run_research_llm_driven(
             service = _infer_service_from_tool(tool_name) or "other"
             # Normalize sources for Tavily/Exa
             if service in ("tavily", "exa"):
-                normalizer = get_normalizer(service)
-                new_sources = normalizer(parsed_result, query_val) if normalizer else []
+                try:
+                    new_sources = extract_sources_from_result(service, query_val, parsed_result)
+                except Exception:
+                    new_sources = []
                 for s in new_sources:
                     key = f"{s.get('service','')}|{s.get('url','')}"
                     if key in seen:

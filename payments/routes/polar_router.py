@@ -23,8 +23,6 @@ def build_polar_router(
     grant_credits: Callable[[str, int, str, Dict[str, Any]], int],
     update_subscription: Callable[[str, str, Optional[str], Optional[str], Dict[str, Any]], None],
     update_profile_plan: Callable[[str, str], None],  # by user_id
-    update_profile_plan_by_email: Callable[[str, str], None],
-    find_user_by_email: Callable[[Optional[str]], Optional[str]],
     verify_supabase_jwt: Callable[[Optional[str]], str],
     pro_default: int,
     plus_default: int,
@@ -33,6 +31,18 @@ def build_polar_router(
 ):
     router = APIRouter()
     DEBUG = os.getenv("POLAR_WEBHOOK_DEBUG", "0") not in ("0", "false", "False")
+    # Only handle the events we actually need; others are acknowledged and ignored
+    HANDLED_EVENTS = {
+        "order.paid",
+        "order.refunded",
+        "invoice.paid",
+        "subscription.created",
+        "subscription.updated",
+        "subscription.active",
+        "subscription.canceled",
+        "subscription.uncanceled",
+        "subscription.revoked",
+    }
 
     def _mask_value(val: Optional[str]) -> str:
         try:
@@ -51,7 +61,7 @@ def build_polar_router(
         raw = await req.body()
         if logger:
             try:
-                logger.info("[polar_webhook] incoming bytes=%s", len(raw or b""))
+                logger.debug("[polar_webhook] incoming bytes=%s", len(raw or b""))
             except Exception:
                 ...
         try:
@@ -84,6 +94,15 @@ def build_polar_router(
                 logger.info("[polar_webhook] evt=%s id=%s", evt_type, event_id)
             except Exception:
                 ...
+
+        # Fast-path ignore for unneeded events
+        if evt_type not in HANDLED_EVENTS and not evt_type.startswith("subscription."):
+            if logger:
+                try:
+                    logger.debug("[polar_webhook] ignored evt=%s id=%s", evt_type, event_id)
+                except Exception:
+                    ...
+            return {"ok": True, "ignored": True}
 
         # Identify user: prefer metadata user_id (robust variants), else email lookup
         meta_raw = data.get("metadata") or {}
@@ -126,7 +145,7 @@ def build_polar_router(
             except Exception:
                 ...
 
-        # Always extract email (even when user_id is present), to drive plan updates by email
+        # Extract email for logging only; do not use for lookup
         email = (
             (data.get("customer") or {}).get("email")
             or (data.get("buyer") or {}).get("email")
@@ -136,12 +155,12 @@ def build_polar_router(
         )
 
         if not user_id:
-            user_id = find_user_by_email(email)
-            if DEBUG and logger:
+            if logger:
                 try:
-                    logger.warning("[polar_webhook] lookup via email=%s -> %s", email, user_id)
+                    logger.warning("[polar_webhook] no user_id in metadata; skipping event id=%s email=%s", event_id, email)
                 except Exception:
                     ...
+            return {"ok": True, "skipped": True, "reason": "no_user_id"}
         if logger:
             try:
                 logger.info("[polar_webhook] identified email=%s user_id=%s", email, user_id)
@@ -152,7 +171,7 @@ def build_polar_router(
             logger.warning("[polar_webhook] User not found for event %s", event_id)
             return {"ok": True, "skipped": True}
 
-        # Payments: only concrete payment confirmations update subscription record
+        # Payments: on concrete payment confirmations: update subscription record, grant credits, and update plan
         if evt_type in ("order.paid", "invoice.paid"):
             product_id = (
                 data.get("product_id")
@@ -162,6 +181,7 @@ def build_polar_router(
             # Optional: update subscription + plan
             status = (data.get("status") or data.get("state") or "active")
             period_end = data.get("current_period_end") or data.get("period_end") or data.get("current_period_end_at")
+            sub_for_cycle = data.get("subscription_id") or (data.get("subscription") or {}).get("id")
             update_subscription(
                 user_id=user_id,
                 provider="polar",
@@ -170,12 +190,48 @@ def build_polar_router(
                 metadata={
                     "event_id": event_id,
                     "event_type": evt_type,
-                    "subscription_id": (data.get("subscription_id") or (data.get("subscription") or {}).get("id")),
+                    "subscription_id": data.get("subscription_id"),
                     "product_id": product_id,
                 },
             )
 
-            return {"ok": True, "user_id": user_id, "noted": True}
+            # Grant credits based on product/plan hint
+            plan_hint = (data.get("metadata") or {}).get("plan")
+            units = determine_units_for_purchase(product_id=product_id, plan_hint=plan_hint)
+            # Use a canonical transaction identifier across related events to ensure idempotency
+            canonical_txn_id = (
+                data.get("invoice_id")
+                or (data.get("invoice") or {}).get("id")
+                or data.get("order_id")
+                or (data.get("order") or {}).get("id")
+                or data.get("checkout_id")
+                or (data.get("checkout") or {}).get("id")
+                or data.get("payment_id")
+                or data.get("transaction_id")
+                or data.get("subscription_id")
+                or (data.get("subscription") or {}).get("id")
+            )
+            # Prefer a cycle-safe rid if subscription and period_end are present, so it's idempotent with subscription.active fallback
+            cycle_rid = f"sub_{sub_for_cycle}_{period_end}" if (sub_for_cycle and period_end) else None
+            rid = f"polar_{cycle_rid or canonical_txn_id or event_id}"
+            new_balance = grant_credits(
+                user_id=user_id,
+                units=units,
+                request_id=rid,
+                meta={
+                    "provider": "polar",
+                    "event_type": evt_type,
+                    "raw": {"id": event_id, "product_id": product_id},
+                },
+            )
+            # Update visible plan snapshot
+            paid_like_statuses = {"active", "paid", "succeeded", "success", "completed"}
+            if str(status).lower() in paid_like_statuses:
+                plan_for_profile = "pro" if units >= pro_default else ("plus" if units >= plus_default else "free")
+                # Always prefer updating by user_id for correctness and speed
+                update_profile_plan(user_id, plan_for_profile)
+
+            return {"ok": True, "user_id": user_id, "granted": units, "balance": new_balance}
 
         # Refunds: revoke credits idempotently
         if evt_type in ("order.refunded",):
@@ -219,7 +275,7 @@ def build_polar_router(
                 metadata={
                     "event_id": event_id,
                     "event_type": evt_type,
-                    "subscription_id": (data.get("subscription_id") or (data.get("subscription") or {}).get("id")),
+                    "subscription_id": data.get("subscription_id"),
                     "product_id": product_id,
                 },
             )
@@ -229,6 +285,8 @@ def build_polar_router(
         if evt_type.startswith("subscription."):
             status = (data.get("status") or data.get("state") or evt_type.split(".")[-1])
             period_end = data.get("current_period_end") or data.get("period_end") or data.get("current_period_end_at")
+            # Polar spec: subscription.* payload has subscription id at data.id
+            sub_id_value = data.get("id")
             update_subscription(
                 user_id=user_id,
                 provider="polar",
@@ -237,9 +295,48 @@ def build_polar_router(
                 metadata={
                     "event_id": event_id,
                     "event_type": evt_type,
-                    "subscription_id": (data.get("subscription_id") or (data.get("subscription") or {}).get("id")),
+                    "subscription_id": sub_id_value,
                 },
             )
+            # Opportunistically update visible plan snapshot by user_id and optionally grant credits once per cycle
+            try:
+                status_l = str(status).lower()
+                # Only infer plan when we have a confident hint
+                product_id = data.get("product_id") or (data.get("product") or {}).get("id")
+                plan_hint = (data.get("metadata") or {}).get("plan") or (meta.get("plan") if isinstance(meta, dict) else None)
+                plan_for_profile = None
+                units_guess = None
+                if product_id:
+                    try:
+                        units_guess = determine_units_for_purchase(product_id=product_id, plan_hint=None)
+                        if isinstance(units_guess, int) and units_guess > 0:
+                            plan_for_profile = "pro" if units_guess >= pro_default else ("plus" if units_guess >= plus_default else "free")
+                    except Exception:
+                        plan_for_profile = None
+                elif isinstance(plan_hint, str) and plan_hint.strip().lower() in ("plus", "pro"):
+                    plan_for_profile = plan_hint.strip().lower()
+                # Apply only on activated/updated/created states to reflect upgrade quickly
+                if plan_for_profile and status_l in ("active", "updated", "created"):
+                    update_profile_plan(user_id, plan_for_profile)
+                # Fallback credit grant: when subscription becomes active and we can derive units,
+                # use a cycle-safe request id to avoid double-grant with order/invoice paid
+                if status_l == "active":
+                    # Derive units if not already
+                    if not isinstance(units_guess, int) or units_guess <= 0:
+                        units_guess = determine_units_for_purchase(product_id=product_id, plan_hint=(plan_hint if isinstance(plan_hint, str) else None))
+                    if isinstance(units_guess, int) and units_guess > 0 and sub_id_value and period_end:
+                        rid = f"polar_sub_{sub_id_value}_{period_end}"
+                        try:
+                            grant_credits(
+                                user_id=user_id,
+                                units=units_guess,
+                                request_id=rid,
+                                meta={"provider": "polar", "event_type": evt_type, "raw": {"id": event_id, "product_id": product_id}, "source": "subscription_fallback"},
+                            )
+                        except Exception:
+                            ...
+            except Exception:
+                ...
             return {"ok": True, "user_id": user_id, "updated": True}
 
         return {"ok": True}
@@ -414,9 +511,9 @@ def build_polar_router(
                         current_period_end=None,
                         metadata={"upgrade": "direct", "target": target, "subscription_id": sub_id},
                     )
+                    # Reflect plan update immediately by user_id
                     try:
-                        if email:
-                            update_profile_plan_by_email(email, target)
+                        update_profile_plan(user_id, target)
                     except Exception:
                         ...
                     return {"ok": True, "mode": "direct", "target": target}
@@ -556,9 +653,9 @@ def build_polar_router(
                         current_period_end=None,
                         metadata={"downgrade": "price_update", "target": target, "subscription_id": sub_id},
                     )
+                    # Reflect plan update immediately by user_id
                     try:
-                        if email:
-                            update_profile_plan_by_email(email, target)
+                        update_profile_plan(user_id, target)
                     except Exception:
                         ...
                     return {"ok": True, "mode": "price_update", "target": target}
