@@ -116,8 +116,8 @@ export function AccountDataProvider({ children }: { children: React.ReactNode })
         headers: { 'Authorization': token ? `Bearer ${token}` : '' }
       })
       if (!res.ok) throw new Error(await res.text())
-      const data = await res.json()
-      const serverKeys: ApiKeyItem[] = Array.isArray((data as any)?.keys) ? (data as any).keys : []
+      const data = await res.json() as { keys?: unknown }
+      const serverKeys: ApiKeyItem[] = Array.isArray(data.keys) ? (data.keys as ApiKeyItem[]) : []
       setApiKeys(serverKeys)
     } catch {
       // noop

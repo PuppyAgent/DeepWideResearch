@@ -123,13 +123,14 @@ export default function PlansPanel() {
             },
             body: JSON.stringify({ target }),
           })
-          const data: any = await resp.json().catch(() => ({}))
+          type UpgradeResponse = { checkout_url?: string; mode?: string }
+          const data = (await resp.json().catch(() => ({}))) as UpgradeResponse
           if (resp.ok) {
-            if ((data?.checkout_url || data?.mode === 'checkout')) {
+            if ((data.checkout_url || data.mode === 'checkout')) {
               // Only allow checkout fallback for free -> paid
               if (activePlan === 'free') {
                 try { localStorage.setItem('dwr_pending_plan', target) } catch {}
-                if (data?.checkout_url) {
+                if (data.checkout_url) {
                   window.location.href = String(data.checkout_url)
                 } else {
                   gotoCheckout(productId, target)

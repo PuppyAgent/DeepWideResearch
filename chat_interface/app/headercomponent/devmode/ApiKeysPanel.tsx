@@ -283,13 +283,13 @@ export default function ApiKeysPanel() {
                   <span style={{ color: '#c678dd' }}>import</span> <span style={{ color: '#e5c07b' }}>DeepWide</span>
                 </div>
                 <div style={{ color: '#666', marginBottom: '10px' }}>
-                  <span style={{ color: '#c678dd' }}>from</span> <span style={{ color: '#98c379' }}>'deepwide-sdk'</span>
+                  <span style={{ color: '#c678dd' }}>from</span> <span style={{ color: '#98c379' }}>&apos;deepwide-sdk&apos;</span>
                 </div>
                 <div style={{ color: '#666', marginBottom: '3px' }}>
                   <span style={{ color: '#61afef' }}>client</span> <span style={{ color: '#56b6c2' }}>=</span> <span style={{ color: '#e5c07b' }}>DeepWide</span><span style={{ color: '#abb2bf' }}>(</span>
                 </div>
                 <div style={{ color: '#666', marginBottom: '3px', paddingLeft: '16px' }}>
-                  <span style={{ color: '#e06c75' }}>api_key</span><span style={{ color: '#56b6c2' }}>=</span><span style={{ color: '#98c379' }}>'dwr_xxx'</span>
+                  <span style={{ color: '#e06c75' }}>api_key</span><span style={{ color: '#56b6c2' }}>=</span><span style={{ color: '#98c379' }}>&apos;dwr_xxx&apos;</span>
                 </div>
                 <div style={{ color: '#666', marginBottom: '10px' }}>
                   <span style={{ color: '#abb2bf' }}>)</span>
@@ -298,7 +298,7 @@ export default function ApiKeysPanel() {
                   <span style={{ color: '#61afef' }}>res</span> <span style={{ color: '#56b6c2' }}>=</span> <span style={{ color: '#61afef' }}>client</span><span style={{ color: '#abb2bf' }}>.</span><span style={{ color: '#61afef' }}>research</span><span style={{ color: '#abb2bf' }}>(</span>
                 </div>
                 <div style={{ color: '#666', paddingLeft: '16px' }}>
-                  <span style={{ color: '#e06c75' }}>query</span><span style={{ color: '#56b6c2' }}>=</span><span style={{ color: '#98c379' }}>'...'</span>
+                  <span style={{ color: '#e06c75' }}>query</span><span style={{ color: '#56b6c2' }}>=</span><span style={{ color: '#98c379' }}>&apos;...&apos;</span>
                 </div>
                 <div style={{ color: '#666' }}>
                   <span style={{ color: '#abb2bf' }}>)</span>
