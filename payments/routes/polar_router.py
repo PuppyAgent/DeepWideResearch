@@ -31,6 +31,9 @@ def build_polar_router(
 ):
     router = APIRouter()
     DEBUG = os.getenv("POLAR_WEBHOOK_DEBUG", "0") not in ("0", "false", "False")
+    # To avoid double-crediting, we default to NOT granting on subscription.* events.
+    # If you operate in an environment where only subscription.* is delivered, set POLAR_ENABLE_SUBSCRIPTION_ACTIVE_GRANT=1
+    FALLBACK_GRANT_ON_SUB_ACTIVE = os.getenv("POLAR_ENABLE_SUBSCRIPTION_ACTIVE_GRANT", "0") not in ("0", "false", "False")
     # Only handle the events we actually need; others are acknowledged and ignored
     HANDLED_EVENTS = {
         "order.paid",
@@ -173,6 +176,16 @@ def build_polar_router(
 
         # Payments: on concrete payment confirmations: update subscription record, grant credits, and update plan
         if evt_type in ("order.paid", "invoice.paid"):
+            # Prefer invoice.paid as the single source of truth.
+            invoice_id_present = (data.get("invoice_id") or (data.get("invoice") or {}).get("id"))
+            if evt_type == "order.paid" and invoice_id_present:
+                if logger:
+                    try:
+                        logger.info("[polar_webhook] skip order.paid because invoice exists invoice_id=%s", invoice_id_present)
+                    except Exception:
+                        ...
+                return {"ok": True, "ignored": True, "reason": "prefer_invoice_paid", "invoice_id": invoice_id_present}
+
             product_id = (
                 data.get("product_id")
                 or (data.get("product") or {}).get("id")
@@ -214,6 +227,11 @@ def build_polar_router(
             # Prefer a cycle-safe rid if subscription and period_end are present, so it's idempotent with subscription.active fallback
             cycle_rid = f"sub_{sub_for_cycle}_{period_end}" if (sub_for_cycle and period_end) else None
             rid = f"polar_{cycle_rid or canonical_txn_id or event_id}"
+            if logger:
+                try:
+                    logger.info("[polar_webhook] grant rid=%s units=%s evt=%s", rid, units, evt_type)
+                except Exception:
+                    ...
             new_balance = grant_credits(
                 user_id=user_id,
                 units=units,
@@ -318,15 +336,20 @@ def build_polar_router(
                 # Apply only on activated/updated/created states to reflect upgrade quickly
                 if plan_for_profile and status_l in ("active", "updated", "created"):
                     update_profile_plan(user_id, plan_for_profile)
-                # Fallback credit grant: when subscription becomes active and we can derive units,
-                # use a cycle-safe request id to avoid double-grant with order/invoice paid
-                if status_l == "active":
+                # Optional fallback credit grant: disabled by default to prevent double-crediting.
+                # Enable only if your Polar setup never delivers order.paid/invoice.paid events.
+                if FALLBACK_GRANT_ON_SUB_ACTIVE and status_l == "active":
                     # Derive units if not already
                     if not isinstance(units_guess, int) or units_guess <= 0:
                         units_guess = determine_units_for_purchase(product_id=product_id, plan_hint=(plan_hint if isinstance(plan_hint, str) else None))
                     if isinstance(units_guess, int) and units_guess > 0 and sub_id_value and period_end:
                         rid = f"polar_sub_{sub_id_value}_{period_end}"
                         try:
+                            if logger:
+                                try:
+                                    logger.info("[polar_webhook] fallback grant rid=%s units=%s", rid, units_guess)
+                                except Exception:
+                                    ...
                             grant_credits(
                                 user_id=user_id,
                                 units=units_guess,

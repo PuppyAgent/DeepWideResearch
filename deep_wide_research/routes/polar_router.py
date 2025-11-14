@@ -93,6 +93,16 @@ def build_polar_router(
 
         # Payments: only concrete payment confirmations grant credits
         if evt_type in ("order.paid", "invoice.paid"):
+            # Prefer invoice.paid as the single source of truth; skip order.paid when an invoice exists.
+            invoice_id_present = (data.get("invoice_id") or (data.get("invoice") or {}).get("id"))
+            if evt_type == "order.paid" and invoice_id_present:
+                if logger:
+                    try:
+                        logger.info("[dwr_polar_webhook] skip order.paid because invoice exists invoice_id=%s", invoice_id_present)
+                    except Exception:
+                        ...
+                return {"ok": True, "ignored": True, "reason": "prefer_invoice_paid", "invoice_id": invoice_id_present}
+
             product_id = (
                 data.get("product_id")
                 or (data.get("product") or {}).get("id")
