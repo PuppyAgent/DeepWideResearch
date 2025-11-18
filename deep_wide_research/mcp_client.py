@@ -192,6 +192,12 @@ class MCPRegistry:
             print(f"❌ Unknown transport type: {config.transport_type}")
             return None
         
+        # Tag client with server name for routing
+        try:
+            setattr(client, "_server_name", name)
+        except Exception:
+            pass
+
         await client.connect()
         # Record active client for unified shutdown
         self._active_clients.append(client)

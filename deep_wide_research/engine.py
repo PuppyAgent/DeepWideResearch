@@ -8,10 +8,11 @@ This engine orchestrates two core phases:
 from __future__ import annotations
 
 import json
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 
 import os
 import sys
+import time
 
 # Support direct execution and module imports - try absolute and relative imports
 try:
@@ -63,8 +64,74 @@ class Configuration:
         self.research_model = os.getenv("RESEARCH_MODEL", "openai:gpt-4.1")
         self.research_model_max_tokens = int(os.getenv("RESEARCH_MODEL_MAX_TOKENS", "10000"))
         self.final_report_model = os.getenv("FINAL_REPORT_MODEL", "openai:gpt-4.1")
-        self.final_report_model_max_tokens = int(os.getenv("FINAL_REPORT_MODEL_MAX_TOKENS", "10000"))
+        self.final_report_model_max_tokens = int(os.getenv("FINAL_REPORT_MODEL_MAX_TOKENS", "128000"))
         self.mcp_prompt = None
+
+MODEL_GRID = [
+    # deep = 0.25
+    [
+        ("openai/gpt-4.1", "openai/gpt-4.1"),   # wide = 0.25
+        ("openai/gpt-4.1", "openai/gpt-4.1"),   # wide = 0.5
+        ("openai/gpt-4.1", "openai/gpt-4.1"),   # wide = 0.75
+        ("openai/gpt-4.1", "openai/gpt-4.1"),   # wide = 1.0
+    ],
+    # deep = 0.5
+    [
+        ("openai/gpt-4.1", "openai/gpt-5"),   # wide = 0.25
+        ("openai/gpt-4.1", "openai/gpt-5"),   # wide = 0.5
+        ("openai/gpt-4.1", "openai/gpt-5"),   # wide = 0.75
+        ("openai/gpt-4.1", "openai/gpt-5"),   # wide = 1.0
+    ],
+    # deep = 0.75
+    [
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.25
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.5
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.75
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 1.0
+    ],
+    # deep = 1.0
+    [
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.25
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.5
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.75
+        ("openai/gpt-5", "openai/gpt-5"),   # wide = 1.0
+    ],
+]
+
+
+def _index_for_param(x: float) -> int:
+    """Map a float in [0,1] to index {0,1,2,3} using simple thresholds."""
+    try:
+        v = float(x)
+    except Exception:
+        v = 0.5
+    if v < 0.25:
+        return 0
+    if v < 0.5:
+        return 0  # <0.5 → 0.25 bucket
+    if v < 0.75:
+        return 1  # [0.5,0.75) → 0.5 bucket
+    if v < 1.0:
+        return 2  # [0.75,1.0) → 0.75 bucket
+    return 3       # >=1.0 → 1.0 bucket
+
+
+def _apply_model_mapping_to_cfg(cfg: Configuration, deep_param: float, wide_param: float) -> None:
+    di = _index_for_param(deep_param)
+    wi = _index_for_param(wide_param)
+    research_model, final_model = MODEL_GRID[di][wi]
+    cfg.research_model = research_model
+    cfg.final_report_model = final_model
+
+
+# ===================== Unified Context (sources) Helpers =====================
+try:
+    from .context_utils import build_context_from_raw_notes
+except ImportError:
+    try:
+        from deep_wide_research.context_utils import build_context_from_raw_notes
+    except ImportError:
+        build_context_from_raw_notes = None
 
 
 async def run_deep_research_stream(user_messages: List[str], cfg: Optional[Configuration] = None, api_keys: Optional[dict] = None, mcp_config: Optional[Dict[str, List[str]]] = None, deep_param: float = 0.5, wide_param: float = 0.5):
@@ -74,6 +141,15 @@ async def run_deep_research_stream(user_messages: List[str], cfg: Optional[Confi
         Status update dictionaries containing 'action' and 'message' fields
     """
     cfg = cfg or Configuration()
+    # Dynamically select models based on deep & wide from frontend
+    _apply_model_mapping_to_cfg(cfg, deep_param, wide_param)
+    # Anchor request start time at server entry and init timing aggregator
+    cfg.request_start_ts = time.perf_counter()
+    if not hasattr(cfg, "_timing_events"):
+        cfg._timing_events = []
+    # Print selected models before any OpenRouter requests
+    print(f"[DeepWideResearch] Using OpenRouter research model: {cfg.research_model}")
+    print(f"[DeepWideResearch] Using OpenRouter final report model: {cfg.final_report_model}")
     state = {
         "messages": [{"role": "user", "content": m} for m in user_messages],
         "research_brief": None,
@@ -103,6 +179,9 @@ async def run_deep_research_stream(user_messages: List[str], cfg: Optional[Confi
         await status_queue.put(message)
     
     # Start the research task
+    # Ensure model is logged before the first OpenRouter call made inside research strategy
+    print(f"[DeepWideResearch] (pre-call) Research will use: {cfg.research_model}")
+    t_research_start = time.perf_counter()
     research_task = asyncio.create_task(_run_researcher(research_topic, cfg, api_keys, mcp_config, deep_param, wide_param, status_callback))
     
     # Read and yield status updates from the queue
@@ -110,6 +189,15 @@ async def run_deep_research_stream(user_messages: List[str], cfg: Optional[Confi
         try:
             # Try to get a status update (short timeout)
             message = await asyncio.wait_for(status_queue.get(), timeout=0.1)
+            # Try to interpret structured sources update
+            try:
+                parsed = json.loads(message) if isinstance(message, str) else None
+                if isinstance(parsed, dict) and parsed.get("event") == "sources_update":
+                    yield {"action": "sources_update", "sources": parsed.get("sources", [])}
+                    continue
+            except Exception:
+                pass
+            # Fallback: plain status text
             yield {"action": "using_tools", "message": message}
         except asyncio.TimeoutError:
             # No message; continue waiting
@@ -119,24 +207,41 @@ async def run_deep_research_stream(user_messages: List[str], cfg: Optional[Confi
     while not status_queue.empty():
         try:
             message = status_queue.get_nowait()
+            try:
+                parsed = json.loads(message) if isinstance(message, str) else None
+                if isinstance(parsed, dict) and parsed.get("event") == "sources_update":
+                    yield {"action": "sources_update", "sources": parsed.get("sources", [])}
+                    continue
+            except Exception:
+                pass
             yield {"action": "using_tools", "message": message}
         except asyncio.QueueEmpty:
             break
     
     # Retrieve research results
     research = await research_task
+    t_research_end = time.perf_counter()
+    try:
+        cfg._timing_events.append({"label": "Research phase total", "seconds": t_research_end - t_research_start})
+    except Exception:
+        pass
     raw_notes = research.get("raw_notes", "") if research else ""
     state["notes"] = [raw_notes] if raw_notes else []
-    
-    if raw_notes:
+    # Build unified context JSON from raw_notes and inject into messages
+    contextjson = research.get("contextjson") if isinstance(research, dict) else None
+    if not contextjson:
         try:
-            json.loads(raw_notes)
+            if callable(build_context_from_raw_notes):
+                contextjson = build_context_from_raw_notes(raw_notes)
+            else:
+                contextjson = {"sources": []}
         except Exception:
-            pass
-        state["messages"].append({
-            "role": "user",
-            "content": f"<RAW_NOTES_JSON>\n{raw_notes}\n</RAW_NOTES_JSON>"
-        })
+            contextjson = {"sources": []}
+    state["contextjson"] = contextjson
+    state["messages"].append({
+        "role": "user",
+        "content": f"<CONTEXT_JSON>\n{json.dumps(contextjson, ensure_ascii=False)}\n</CONTEXT_JSON>"
+    })
 
     # ============================================================
     # Phase 2: Generate - use final_report_generation_prompt with streaming
@@ -153,11 +258,19 @@ async def run_deep_research_stream(user_messages: List[str], cfg: Optional[Confi
             from generate_strategy import generate_report_stream
     
     # Stream the report generation
+    # Ensure model is logged before the first OpenRouter call made inside generation strategy
+    print(f"[DeepWideResearch] (pre-call) Final report will use: {cfg.final_report_model}")
+    t_generate_start = time.perf_counter()
     final_report_content = ""
     async for chunk in generate_report_stream(state, cfg, api_keys):
         final_report_content += chunk
         # Yield each chunk as it arrives
         yield {"action": "report_chunk", "chunk": chunk, "accumulated_report": final_report_content}
+    t_generate_end = time.perf_counter()
+    try:
+        cfg._timing_events.append({"label": "Generation phase total (stream)", "seconds": t_generate_end - t_generate_start})
+    except Exception:
+        pass
     
     # Update state with the final report
     state["final_report"] = final_report_content
@@ -175,14 +288,38 @@ async def run_deep_research_stream(user_messages: List[str], cfg: Optional[Confi
     
     if get_registry is not None:
         try:
+            t_close_start = time.perf_counter()
             registry = get_registry()
             if hasattr(registry, "close_all_clients"):
                 await registry.close_all_clients()
+            t_close_end = time.perf_counter()
+            try:
+                cfg._timing_events.append({"label": "MCP clients close_all_clients", "seconds": t_close_end - t_close_start})
+            except Exception:
+                pass
         except Exception:
             pass
     
     # Send the completion signal
     yield {"action": "complete", "message": final_report_content, "final_report": final_report_content}
+    # End-to-end timing from request receipt to completion
+    t_all_end = time.perf_counter()
+    if hasattr(cfg, "request_start_ts"):
+        try:
+            cfg._timing_events.append({"label": "End-to-end total (stream, request->complete)", "seconds": t_all_end - cfg.request_start_ts})
+        except Exception:
+            pass
+    # Final consolidated timing summary (print once at the end)
+    try:
+        if getattr(cfg, "_timing_events", None):
+            print("\n[Timing Summary]")
+            for ev in cfg._timing_events:
+                label = ev.get("label", "event")
+                secs = ev.get("seconds", 0.0)
+                print(f"- {label}: {secs:.3f}s")
+            print("")
+    except Exception:
+        pass
 
 
 async def run_deep_research(user_messages: List[str], cfg: Optional[Configuration] = None, api_keys: Optional[dict] = None, mcp_config: Optional[Dict[str, List[str]]] = None, deep_param: float = 0.5, wide_param: float = 0.5) -> dict:
@@ -197,6 +334,15 @@ async def run_deep_research(user_messages: List[str], cfg: Optional[Configuratio
         State dict containing research results and the final report
     """
     cfg = cfg or Configuration()
+    # Dynamically select models based on deep & wide from frontend
+    _apply_model_mapping_to_cfg(cfg, deep_param, wide_param)
+    # Anchor request start time at server entry and init timing aggregator
+    cfg.request_start_ts = time.perf_counter()
+    if not hasattr(cfg, "_timing_events"):
+        cfg._timing_events = []
+    # Print selected models before any OpenRouter requests
+    print(f"[DeepWideResearch] Using OpenRouter research model: {cfg.research_model}")
+    print(f"[DeepWideResearch] Using OpenRouter final report model: {cfg.final_report_model}")
     state = {
         "messages": [{"role": "user", "content": m} for m in user_messages],
         "research_brief": None,
@@ -211,24 +357,44 @@ async def run_deep_research(user_messages: List[str], cfg: Optional[Configuratio
     # ============================================================
     # Phase 1: Research - use unified_research_prompt
     # ============================================================
+    # Ensure model is logged before the first OpenRouter call made inside research strategy
+    print(f"[DeepWideResearch] (pre-call) Research will use: {cfg.research_model}")
+    t_research_start = time.perf_counter()
     research = await _run_researcher(research_topic, cfg, api_keys, mcp_config, deep_param, wide_param)
+    t_research_end = time.perf_counter()
+    try:
+        cfg._timing_events.append({"label": "Research phase total", "seconds": t_research_end - t_research_start})
+    except Exception:
+        pass
     raw_notes = research.get("raw_notes", "") if research else ""
     state["notes"] = [raw_notes] if raw_notes else []
-    # Also inject raw_notes JSON into messages for the generation phase as context
-    if raw_notes:
+    # Build unified context JSON from raw_notes and inject into messages
+    contextjson = research.get("contextjson") if isinstance(research, dict) else None
+    if not contextjson:
         try:
-            # Validate whether it is JSON; if not, still include it
-            json.loads(raw_notes)
+            if callable(build_context_from_raw_notes):
+                contextjson = build_context_from_raw_notes(raw_notes)
+            else:
+                contextjson = {"sources": []}
         except Exception:
-            pass
-        state["messages"].append({
-            "role": "user",
-            "content": f"<RAW_NOTES_JSON>\n{raw_notes}\n</RAW_NOTES_JSON>"
-        })
+            contextjson = {"sources": []}
+    state["contextjson"] = contextjson
+    state["messages"].append({
+        "role": "user",
+        "content": f"<CONTEXT_JSON>\n{json.dumps(contextjson, ensure_ascii=False)}\n</CONTEXT_JSON>"
+    })
     # ============================================================
     # Phase 2: Generate - use final_report_generation_prompt
     # ============================================================
+    # Ensure model is logged before the first OpenRouter call made inside generation strategy
+    print(f"[DeepWideResearch] (pre-call) Final report will use: {cfg.final_report_model}")
+    t_generate_start = time.perf_counter()
     await final_report_generation(state, cfg, api_keys)
+    t_generate_end = time.perf_counter()
+    try:
+        cfg._timing_events.append({"label": "Generation phase total (non-stream)", "seconds": t_generate_end - t_generate_start})
+    except Exception:
+        pass
     
     # Close all MCP clients to avoid cancel-scope errors caused by different tasks closing clients
     try:
@@ -241,12 +407,36 @@ async def run_deep_research(user_messages: List[str], cfg: Optional[Configuratio
     
     if get_registry is not None:
         try:
+            t_close_start = time.perf_counter()
             registry = get_registry()
             if hasattr(registry, "close_all_clients"):
                 await registry.close_all_clients()
+            t_close_end = time.perf_counter()
+            try:
+                cfg._timing_events.append({"label": "MCP clients close_all_clients", "seconds": t_close_end - t_close_start})
+            except Exception:
+                pass
         except Exception:
             pass
     
+    # End-to-end timing from request receipt to completion
+    t_all_end = time.perf_counter()
+    if hasattr(cfg, "request_start_ts"):
+        try:
+            cfg._timing_events.append({"label": "End-to-end total (non-stream, request->complete)", "seconds": t_all_end - cfg.request_start_ts})
+        except Exception:
+            pass
+    # Final consolidated timing summary (print once at the end)
+    try:
+        if getattr(cfg, "_timing_events", None):
+            print("\n[Timing Summary]")
+            for ev in cfg._timing_events:
+                label = ev.get("label", "event")
+                secs = ev.get("seconds", 0.0)
+                print(f"- {label}: {secs:.3f}s")
+            print("")
+    except Exception:
+        pass
     return state
 
 
@@ -261,7 +451,7 @@ if __name__ == "__main__":
             self.research_model = "openai/o4-mini"
             self.research_model_max_tokens = 16000
             self.final_report_model = "openai/o4-mini"
-            self.final_report_model_max_tokens = 16000
+            self.final_report_model_max_tokens = 128000
             self.max_react_tool_calls = 5
     
     async def test():

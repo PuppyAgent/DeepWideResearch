@@ -12,6 +12,7 @@ import asyncio
 import json
 import re
 import sys
+import time
 from datetime import datetime
 from typing import Dict, List, Optional, Any
 
@@ -21,17 +22,20 @@ try:
     from .providers import chat_complete
     from .mcp_client import get_registry
     from .newprompt import create_unified_research_prompt
+    from .context_utils import extract_sources_from_result, _infer_service_from_tool
 except ImportError:
     # Try absolute import (direct execution or deployment environment)
     try:
         from deep_wide_research.providers import chat_complete
         from deep_wide_research.mcp_client import get_registry
         from deep_wide_research.newprompt import create_unified_research_prompt
+        from deep_wide_research.context_utils import extract_sources_from_result, _infer_service_from_tool
     except ImportError:
         # Import as standalone module (Railway deployment environment)
         from providers import chat_complete
         from mcp_client import get_registry
         from newprompt import create_unified_research_prompt
+        from context_utils import extract_sources_from_result, _infer_service_from_tool
 
 
 # MCP tool selection configuration: {server_name: [tool_names]}
@@ -137,21 +141,37 @@ def parse_tool_calls(content: str) -> List[Dict[str, Any]]:
 
 async def _execute_single_tool(
     tc: Dict[str, Any],
-    mcp_clients: List
+    mcp_clients: List,
+    cfg
 ) -> Dict[str, Any]:
     """Execute a single tool call"""
     result = None
-    for client in mcp_clients:
+    t_tool_start = time.perf_counter()
+    # Route to the correct client by service name inferred from tool
+    service = _infer_service_from_tool(tc.get("tool", "")) or ""
+    # Prefer clients whose _server_name matches service; fallback to all
+    ordered_clients = [c for c in mcp_clients if getattr(c, "_server_name", "").lower() == service] or list(mcp_clients)
+    for client in ordered_clients:
         try:
-            result = await client.call_tool(tc["tool"], tc["arguments"])
-            result = json.dumps(result)
-            break  # Stop if successful
-        except:
+            raw = await client.call_tool(tc["tool"], tc.get("arguments", {}))
+            # If the server returned an explicit error marker, try next client
+            if isinstance(raw, dict) and raw.get("isError") is True:
+                continue
+            result = json.dumps(raw)
+            break  # Stop only when non-error result obtained
+        except Exception:
             continue  # Try next client on failure
     
     if result is None:
         result = json.dumps({"error": f"Tool '{tc['tool']}' not found in any MCP server"})
     
+    t_tool_end = time.perf_counter()
+    try:
+        if hasattr(cfg, "_timing_events"):
+            cfg._timing_events.append({"label": f"Tool {tc['tool']} execution total", "seconds": t_tool_end - t_tool_start})
+    except Exception:
+        pass
+
     # Output tool result
     print(f"\n✓ Tool '{tc['tool']}' result ({len(result)} chars)")
     print(f"{'='*60}")
@@ -165,16 +185,24 @@ async def _execute_single_tool(
 
 async def execute_tool_calls(
     tool_calls: List[Dict[str, Any]],
-    mcp_clients: List
+    mcp_clients: List,
+    cfg
 ) -> List[Dict[str, Any]]:
     """Execute all tool calls in parallel and return results list"""
     if not tool_calls:
         return []
     
     # Execute all tool calls in parallel
+    t_exec_start = time.perf_counter()
     tool_results = await asyncio.gather(
-        *[_execute_single_tool(tc, mcp_clients) for tc in tool_calls]
+        *[_execute_single_tool(tc, mcp_clients, cfg) for tc in tool_calls]
     )
+    t_exec_end = time.perf_counter()
+    try:
+        if hasattr(cfg, "_timing_events"):
+            cfg._timing_events.append({"label": "execute_tool_calls gather", "seconds": t_exec_end - t_exec_start})
+    except Exception:
+        pass
 
     print(tool_results)
     
@@ -204,6 +232,7 @@ async def run_research_llm_driven(
     
     # 1. Collect MCP tools - use configuration from frontend or default
     print("\n🔍 Collecting tools from MCP servers...")
+    t_collect_start = time.perf_counter()
     registry = get_registry()
     
     # Use MCP configuration from frontend, or use default if not provided
@@ -211,6 +240,12 @@ async def run_research_llm_driven(
     print(f"📋 Using MCP config: {effective_config}")
     
     mcp_tools, mcp_clients = await registry.collect_tools(effective_config)
+    t_collect_end = time.perf_counter()
+    try:
+        if hasattr(cfg, "_timing_events"):
+            cfg._timing_events.append({"label": "MCP collect_tools", "seconds": t_collect_end - t_collect_start})
+    except Exception:
+        pass
     
     if not mcp_tools:
         print("⚠️ No tools available")
@@ -228,6 +263,7 @@ async def run_research_llm_driven(
         print(f"  - {tool.get('name', 'unknown')}")
     
     # 2. Build system prompt - dynamically generate using create_unified_research_prompt
+    t_prompt_start = time.perf_counter()
     mcp_prompt = build_mcp_tools_description(mcp_tools)
     max_iterations = getattr(cfg, 'max_react_tool_calls', 8)
     
@@ -238,6 +274,12 @@ async def run_research_llm_driven(
         deep_param=deep_param,
         wide_param=wide_param
     )
+    t_prompt_end = time.perf_counter()
+    try:
+        if hasattr(cfg, "_timing_events"):
+            cfg._timing_events.append({"label": "Build research system prompt", "seconds": t_prompt_end - t_prompt_start})
+    except Exception:
+        pass
     
     messages = [
         {"role": "system", "content": system_prompt},
@@ -249,19 +291,40 @@ async def run_research_llm_driven(
     max_steps = getattr(cfg, 'max_react_tool_calls', 8)
     conversation_history = []  # Save complete conversation history for final return
     tool_interactions: List[Dict[str, Any]] = []  # Accumulate all tool calls and results (for JSON raw_notes)
+    contextjson: Dict[str, Any] = {"sources": []}
 
     # Tool calling loop
     for step in range(max_steps):
+        # Print current context before prompting LLM
+        try:
+            print("\n[CONTEXT_JSON - research before prompt]")
+            print(json.dumps(contextjson, ensure_ascii=False))
+        except Exception:
+            pass
         # Call LLM (pure conversation mode)
+        t_llm_start = time.perf_counter()
         resp = await chat_complete(
             model=cfg.research_model,
             messages=messages,
             max_tokens=cfg.research_model_max_tokens,
             api_keys=api_keys,
         )
+        t_llm_end = time.perf_counter()
+        try:
+            if hasattr(cfg, "_timing_events"):
+                cfg._timing_events.append({"label": f"Step {step+1} LLM chat_complete", "seconds": t_llm_end - t_llm_start})
+        except Exception:
+            pass
         
         # Parse tool calls from response
+        t_parse_start = time.perf_counter()
         tool_calls = parse_tool_calls(resp.content)
+        t_parse_end = time.perf_counter()
+        try:
+            if hasattr(cfg, "_timing_events"):
+                cfg._timing_events.append({"label": f"Step {step+1} parse tool calls", "seconds": t_parse_end - t_parse_start})
+        except Exception:
+            pass
         
         # Output raw LLM response
         print(f"\n{'='*60}")
@@ -284,14 +347,16 @@ async def run_research_llm_driven(
                 "tool_calls": tool_interactions,
             }, ensure_ascii=False)
             return {
-                "raw_notes": raw_json
+                "raw_notes": raw_json,
+                "contextjson": contextjson
             }
         
         # Check if ResearchComplete was called
         if any(tc["tool"] == "ResearchComplete" for tc in tool_calls):
             print("\n✅ Research completed by agent")
             return {
-                "raw_notes": "\n\n".join([m["content"] for m in conversation_history if m.get("content")])
+                "raw_notes": "\n\n".join([m["content"] for m in conversation_history if m.get("content")]),
+                "contextjson": contextjson
             }
         
         # Add assistant message to conversation
@@ -305,44 +370,82 @@ async def run_research_llm_driven(
             await status_callback(f"using {tools_text}")
         
         # Execute all tool calls
-        tool_results = await execute_tool_calls(tool_calls, mcp_clients)
+        t_tools_start = time.perf_counter()
+        tool_results = await execute_tool_calls(tool_calls, mcp_clients, cfg)
+        t_tools_end = time.perf_counter()
+        try:
+            if hasattr(cfg, "_timing_events"):
+                cfg._timing_events.append({"label": f"Step {step+1} execute all tool calls", "seconds": t_tools_end - t_tools_start})
+        except Exception:
+            pass
 
         # Record this round's tool calls and results (structured as JSON items)
         call_info_map = {tc["id"]: {"tool": tc["tool"], "arguments": tc.get("arguments", {})} for tc in tool_calls}
+        # Build/extend context from each tool result
+        # Maintain simple dedup by (service,url)
+        seen = {f"{s.get('service','')}|{s.get('url','')}": True for s in contextjson.get("sources", [])}
         for tr in tool_results:
             call_id = tr.get("tool_call_id")
             info = call_info_map.get(call_id, {})
             result_text = tr.get("result", "")
-            # Prioritize parsing as JSON
-            parsed_result: Any
+            # Parse once
             try:
-                parsed_result = json.loads(result_text)
+                parsed_result: Any = json.loads(result_text)
             except Exception:
                 parsed_result = result_text
+            tool_name = tr.get("tool") or info.get("tool") or ""
+            tool_args = info.get("arguments", {}) if isinstance(info.get("arguments", {}), dict) else {}
+            query_val = tool_args.get("query")
+            service = _infer_service_from_tool(tool_name) or "other"
+            # Normalize sources for Tavily/Exa
+            if service in ("tavily", "exa"):
+                try:
+                    new_sources = extract_sources_from_result(service, query_val, parsed_result)
+                except Exception:
+                    new_sources = []
+                for s in new_sources:
+                    key = f"{s.get('service','')}|{s.get('url','')}"
+                    if key in seen:
+                        continue
+                    seen[key] = True
+                    contextjson.setdefault("sources", []).append(s)
+
+            # Save interaction record
             tool_interactions.append({
                 "step": step + 1,
                 "id": call_id,
-                "tool": tr.get("tool") or info.get("tool"),
-                "arguments": info.get("arguments", {}),
+                "tool": tool_name,
+                "arguments": tool_args,
                 "result": parsed_result,
             })
-        
-        # Add tool results back to conversation
-        # Format as readable text for LLM understanding
-        results_text = "\n\n".join([
-            f"<tool_result tool_call_id=\"{tr['tool_call_id']}\" tool=\"{tr['tool']}\">\n{tr['result']}\n</tool_result>"
-            for tr in tool_results
-        ])
-        
-        messages.append({"role": "user", "content": f"Tool results:\n{results_text}"})
-        conversation_history.append({"role": "tool_results", "content": results_text})
+
+        # Reassign rank by order
+        for i, s in enumerate(contextjson.get("sources", [])):
+            s["rank"] = i
+
+        # Inject context JSON for LLM instead of raw tool results
+        ctx_block = f"<CONTEXT_JSON>\n{json.dumps(contextjson, ensure_ascii=False)}\n</CONTEXT_JSON>"
+        messages.append({"role": "user", "content": ctx_block})
+        conversation_history.append({"role": "contextjson", "content": ctx_block})
+
+        # Send minimal sources update to frontend via status callback
+        if status_callback:
+            try:
+                minimal_sources = [
+                    {"service": s.get("service", ""), "query": s.get("query", ""), "url": s.get("url", "")}
+                    for s in contextjson.get("sources", [])
+                    if s.get("service") and s.get("url")
+                ]
+                await status_callback(json.dumps({"event": "sources_update", "sources": minimal_sources}, ensure_ascii=False))
+            except Exception:
+                pass
     
     # Reached max steps, return collected tool interactions as JSON
     raw_json = json.dumps({
         "topic": topic,
         "tool_calls": tool_interactions,
     }, ensure_ascii=False)
-    return {"raw_notes": raw_json}
+    return {"raw_notes": raw_json, "contextjson": contextjson}
 
 
 if __name__ == "__main__":

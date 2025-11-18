@@ -26,6 +26,7 @@ import requests
 from jose import jwt
 import secrets
 import hashlib
+import hmac
 from datetime import datetime, timezone, timedelta
 import logging
 
@@ -54,6 +55,27 @@ try:
     load_dotenv(dotenv_path=current_dir / '.env', override=False)
 except Exception:
     pass
+# Polar webhook secret (optional but recommended)
+POLAR_WEBHOOK_SECRET = os.getenv("POLAR_WEBHOOK_SECRET")
+
+def _verify_polar_signature(req: "Request", raw_body: bytes) -> None:
+    """Verify Polar webhook signature using HMAC-SHA256 over raw body.
+    Expects header 'Polar-Webhook-Signature' containing lowercase hex digest.
+    """
+    if not POLAR_WEBHOOK_SECRET:
+        return
+    sig = (
+        req.headers.get("Polar-Webhook-Signature")
+        or req.headers.get("polar-webhook-signature")
+        or req.headers.get("POLAR-WEBHOOK-SIGNATURE")
+    )
+    if not sig:
+        raise HTTPException(status_code=403, detail="Missing Polar-Webhook-Signature")
+    digest = hmac.new(POLAR_WEBHOOK_SECRET.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
+    header_sig = sig.strip().lower()
+    if not hmac.compare_digest(header_sig, digest):
+        raise HTTPException(status_code=403, detail="Invalid webhook signature")
+
 
 # Detect if running in a production environment
 is_production = bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("RENDER") or os.getenv("VERCEL"))
@@ -743,133 +765,10 @@ async def get_balance(req: Request):
     return {"user_id": user_id, "balance": balance}
 
 
-# ===================== Polar Webhook =====================
-@app.post("/api/polar/webhook")
-async def polar_webhook(req: Request):
-    """Handle Polar webhook events (sandbox/production).
-
-    Grants monthly credits on successful payment/activation and optionally updates subscription + plan.
-    """
-    try:
-        payload = await req.json()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid JSON payload")
-
-    evt_type = str(payload.get("type") or "").lower()
-    data = payload.get("data") or {}
-    event_id = str(payload.get("id") or data.get("id") or int(time.time()*1000))
-
-    # Identify user: prefer metadata.user_id, else email lookup
-    meta = data.get("metadata") or {}
-    user_id = meta.get("user_id") or meta.get("supabase_user_id")
-
-    if not user_id:
-        email = (
-            data.get("customer", {}).get("email")
-            or data.get("buyer", {}).get("email")
-            or data.get("email")
-            or payload.get("customerEmail")
-        )
-        user_id = _find_user_by_email(email)
-
-    if not user_id:
-        # Can't resolve user; nothing to grant
-        logger.warning("[polar_webhook] User not found for event %s", event_id)
-        return {"ok": True, "skipped": True}
-
-    # Determine if event should grant credits
-    grantworthy = any(k in evt_type for k in ["paid", "payment", "invoice", "subscription.active", "subscription_created", "subscription_updated"])
-
-    if grantworthy:
-        # Try to resolve product/price and plan
-        product_id = (
-            data.get("product_id")
-            or (data.get("product") or {}).get("id")
-            or (data.get("price") or {}).get("product_id")
-        )
-        price_id = data.get("price_id") or (data.get("price") or {}).get("id")
-        plan_hint = (data.get("metadata") or {}).get("plan")
-        units = _determine_units_for_purchase(product_id=product_id, price_id=price_id, plan_hint=plan_hint)
-        rid = f"polar_{event_id}"
-        new_balance = _grant_credits(
-            user_id=user_id,
-            units=units,
-            request_id=rid,
-            meta={
-                "provider": "polar",
-                "event_type": evt_type,
-                "raw": {"id": event_id, "product_id": product_id, "price_id": price_id},
-            },
-        )
-
-        # Optional: update subscription + plan
-        status = (data.get("status") or data.get("state") or "active")
-        period_end = data.get("current_period_end") or data.get("period_end") or data.get("current_period_end_at")
-        _update_subscription(
-            user_id=user_id,
-            provider="polar",
-            status=str(status).lower(),
-            current_period_end=period_end,
-            metadata={"event_id": event_id, "event_type": evt_type},
-        )
-        # Promote plan based on resolved units if active/paid
-        if str(status).lower() in ("active", "paid"):
-            plan_for_profile = "pro" if units >= POLAR_PRO_CREDITS_DEFAULT else ("plus" if units >= POLAR_PLUS_CREDITS_DEFAULT else "free")
-            _update_profile_plan(user_id, plan_for_profile)
-
-        return {"ok": True, "user_id": user_id, "granted": units, "balance": new_balance}
-
-    # Non-grant events acknowledged
-    return {"ok": True}
+## Polar routes are now provided via an included router
 
 
 # ===================== API Key Management Endpoints =====================
-class CheckoutSuccessRequest(BaseModel):
-    """Client-confirmed checkout success.
-    Used as a fallback to grant credits immediately upon redirect success.
-    """
-    plan: Optional[str] = None  # 'plus' | 'pro'
-    product_id: Optional[str] = None
-    price_id: Optional[str] = None
-
-
-@app.post("/api/polar/checkout/success")
-async def polar_checkout_success(body: CheckoutSuccessRequest, req: Request):
-    """Grant credits immediately after client returns from successful checkout.
-
-    This is complementary to the webhook; safe to call once per success.
-    """
-    try:
-        user_id = _verify_supabase_jwt(req.headers.get("Authorization"))
-    except Exception as e:
-        logger.error(f"JWT verification failed on checkout success: {e}")
-        raise
-
-    units = _determine_units_for_purchase(
-        product_id=(body.product_id or None),
-        price_id=(body.price_id or None),
-        plan_hint=(body.plan or None),
-    )
-
-    rid = f"polar_checkout_success_{user_id}_{int(time.time())}"
-    new_balance = _grant_credits(
-        user_id=user_id,
-        units=units,
-        request_id=rid,
-        meta={
-            "provider": "polar",
-            "source": "checkout_success_endpoint",
-            "product_id": body.product_id,
-            "price_id": body.price_id,
-            "plan": (body.plan or None),
-        },
-    )
-
-    # Update plan optimistically based on units
-    plan_for_profile = "pro" if units >= POLAR_PRO_CREDITS_DEFAULT else ("plus" if units >= POLAR_PLUS_CREDITS_DEFAULT else "free")
-    _update_profile_plan(user_id, plan_for_profile)
-
-    return {"ok": True, "user_id": user_id, "granted": units, "balance": new_balance}
 class CreateApiKeyRequest(BaseModel):
     name: Optional[str] = None
     expires_in_days: Optional[int] = None
@@ -964,24 +863,22 @@ async def list_api_keys(req: Request):
         # Aggregate usage by api_key prefix (sum of negative deltas per prefix)
         usage_by_prefix: Dict[str, int] = {}
         try:
+            # Read from DB view to avoid PostgREST group-by incompatibilities
             usage_resp = _supabase_rest_get(
-                "/rest/v1/credit_ledger",
+                "/rest/v1/credit_usage_by_prefix",
                 params={
                     "user_id": f"eq.{user_id}",
-                    "delta": "lt.0",
-                    "select": "prefix:meta->>api_key_prefix,total:sum(delta)",
-                    "group": "prefix",
+                    "select": "api_key_prefix,used",
                 },
             )
             if usage_resp.ok:
                 for row in usage_resp.json():
-                    prefix = row.get("prefix")
-                    total = row.get("total")
+                    prefix = row.get("api_key_prefix")
                     if not prefix:
                         continue
                     try:
-                        # total is negative sum, convert to positive used credits
-                        used = int(total) * -1 if total is not None else 0
+                        used_val = row.get("used")
+                        used = int(used_val) if used_val is not None else 0
                     except Exception:
                         used = 0
                     usage_by_prefix[prefix] = used
@@ -1154,11 +1051,33 @@ async def test_mcp_services(request: MCPTestRequest):
     return MCPTestResponse(services=results)
 
 
+## Polar routes moved to standalone payments service
+
 if __name__ == "__main__":
     import uvicorn
+    import socket
     
-    port = int(os.getenv("PORT", "8000"))
+    port_env = os.getenv("DEEPWIDE_PORT") or os.getenv("PORT")
+    port = int(port_env) if port_env else 8000
     host = os.getenv("HOST", "0.0.0.0")
+    allow_fallback = os.getenv("ALLOW_PORT_FALLBACK", "1") not in ("0", "false", "False")
+
+    def _is_port_free(p: int) -> bool:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                s.bind((host, p))
+                return True
+        except OSError:
+            return False
+
+    # If chosen port is busy and fallback allowed, try next ports
+    if not _is_port_free(port) and allow_fallback and not port_env:
+        base = port
+        for candidate in range(base + 1, base + 11):  # try next 10 ports
+            if _is_port_free(candidate):
+                port = candidate
+                break
     
     print("="*80)
     print("🚀 Starting PuppyResearch API Server")

@@ -15,6 +15,7 @@ export interface DeepWideGridProps {
   outerBorder?: number
   outerPadding?: number
   title?: string
+  minimal?: boolean
 }
 
 export default function DeepWideGrid({
@@ -24,7 +25,8 @@ export default function DeepWideGrid({
   innerBorder = 1,
   outerBorder = 1,
   outerPadding = 4,
-  title
+  title,
+  minimal = false
 }: DeepWideGridProps) {
   const step = 0.25
   const frameOffset = outerBorder + outerPadding
@@ -48,7 +50,7 @@ export default function DeepWideGrid({
   const containerStyle: React.CSSProperties = {
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px',
+    gap: minimal ? '0px' : '6px',
     alignItems: 'stretch',
     position: 'relative',
     width: '100%'
@@ -76,8 +78,8 @@ export default function DeepWideGrid({
     overflow: 'visible',
     background: 'rgba(10, 10, 10, 0.6)',
     boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4), inset 0 1px 2px rgba(255, 255, 255, 0.05)',
-    marginTop: '26px',
-    marginLeft: '40px',
+    marginTop: minimal ? '0px' : '26px',
+    marginLeft: minimal ? '0px' : '40px',
     cursor: 'default'
   }
 
@@ -153,7 +155,7 @@ export default function DeepWideGrid({
   // Display values and tooltips
   const displayWide = clampedWide
   const displayDeep = clampedDeep
-  const tooltipVisible = hoverCell?.row === selectedRowIndex && hoverCell?.col === selectedColIndex
+  const tooltipVisible = !minimal && hoverCell?.row === selectedRowIndex && hoverCell?.col === selectedColIndex
   
   // Simplified tooltip position calculation - based on selected cell position
   const selectedCellLeft = frameOffset + selectedColIndex * (cellSize + innerBorder)
@@ -206,6 +208,8 @@ export default function DeepWideGrid({
 
   return (
     <div style={containerStyle}>
+      {!minimal && (
+        <>
       {/* Header Title */}
       <div style={headerTitleStyle}>Deep × Wide Settings</div>
       
@@ -223,8 +227,12 @@ export default function DeepWideGrid({
           </div>
         </div>
       </div>
+        </>
+      )}
 
       <div style={gridWrapperStyle}>
+        {!minimal && (
+          <>
         {/* Axis labels */}
         <div style={{ 
           ...axisLabelStyle, 
@@ -255,10 +263,12 @@ export default function DeepWideGrid({
             <path d={`M4 0V${gridInnerHeight - 38}M4 ${gridInnerHeight - 38}L1 ${gridInnerHeight - 41}M4 ${gridInnerHeight - 38}L7 ${gridInnerHeight - 41}`} stroke="#888" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </div>
+          </>
+        )}
         <div style={gridStyle}>
           {renderCells()}
         </div>
-        <div style={tooltipStyle}>{`W ${displayWide.toFixed(2)} • D ${displayDeep.toFixed(2)}`}</div>
+        {!minimal && <div style={tooltipStyle}>{`W ${displayWide.toFixed(2)} • D ${displayDeep.toFixed(2)}`}</div>}
       </div>
     </div>
   )

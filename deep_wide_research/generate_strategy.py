@@ -7,6 +7,8 @@ messages, research brief (optional), and findings collected during research.
 from __future__ import annotations
 
 from typing import Dict, List, Optional
+import json
+import time
 
 # Support direct execution and module imports - try absolute and relative imports
 try:
@@ -53,13 +55,28 @@ async def generate_report(state: Dict, cfg, api_keys: Optional[dict] = None) -> 
     # Optional: print debug logs
     print(system_message["content"])
     print(user_payload["content"])
+    try:
+        print("\n[CONTEXT_JSON - generate before prompt]")
+        print(json.dumps(state.get("contextjson") or {"sources": []}, ensure_ascii=False))
+    except Exception:
+        pass
 
+    t_llm_start = time.perf_counter()
     resp = await chat_complete(
         cfg.final_report_model,
         [system_message, user_payload],
         cfg.final_report_model_max_tokens,
         api_keys,
     )
+    t_llm_end = time.perf_counter()
+    try:
+        if hasattr(cfg, "_timing_events"):
+            cfg._timing_events.append({
+                "label": "Final report LLM call (non-stream)",
+                "seconds": t_llm_end - t_llm_start
+            })
+    except Exception:
+        pass
     return resp.content
 
 
@@ -94,9 +111,17 @@ async def generate_report_stream(state: Dict, cfg, api_keys: Optional[dict] = No
     # Optional: print debug logs
     print(system_message["content"])
     print(user_payload["content"])
+    try:
+        print("\n[CONTEXT_JSON - generate before prompt]")
+        print(json.dumps(state.get("contextjson") or {"sources": []}, ensure_ascii=False))
+    except Exception:
+        pass
 
     # Accumulate the complete report for final debug output
     accumulated_report = ""
+    # Anchor to request start if available, else now
+    start_ts = getattr(cfg, "request_start_ts", time.perf_counter())
+    first_chunk_time: Optional[float] = None
     
     async for chunk in chat_complete_stream(
         cfg.final_report_model,
@@ -104,6 +129,16 @@ async def generate_report_stream(state: Dict, cfg, api_keys: Optional[dict] = No
         cfg.final_report_model_max_tokens,
         api_keys,
     ):
+        if first_chunk_time is None:
+            first_chunk_time = time.perf_counter()
+            try:
+                if hasattr(cfg, "_timing_events"):
+                    cfg._timing_events.append({
+                        "label": "TTFT (request->first_token)",
+                        "seconds": first_chunk_time - start_ts
+                    })
+            except Exception:
+                pass
         accumulated_report += chunk
         yield chunk
     
@@ -113,5 +148,6 @@ async def generate_report_stream(state: Dict, cfg, api_keys: Optional[dict] = No
     print("="*80)
     print(accumulated_report)
     print("="*80 + "\n")
+    # Do not print or add another end-to-end metric here to avoid duplication; engine prints summary
 
 

@@ -136,7 +136,7 @@ export default function MCPButton({ service, onServiceChange }: MCPButtonProps) 
           left: '0',
           width: '195px',
           background: 'linear-gradient(135deg, rgba(25,25,25,0.98) 0%, rgba(15,15,15,0.98) 100%)',
-          border: '1px solid #2a2a2a',
+          border: '1px solid #3a3a3a',
           borderRadius: '14px',
           boxShadow: isOpen 
             ? '0 12px 40px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.08), inset 0 1px 0 rgba(255,255,255,0.1)' 
@@ -157,7 +157,7 @@ export default function MCPButton({ service, onServiceChange }: MCPButtonProps) 
           <div style={{ 
             marginBottom: '12px',
             paddingBottom: '8px',
-            borderBottom: '1px solid #2a2a2a',
+            borderBottom: '1px solid #3a3a3a',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between'
@@ -326,7 +326,7 @@ export default function MCPButton({ service, onServiceChange }: MCPButtonProps) 
             <div style={{
               marginTop: '12px',
               paddingTop: '12px',
-              borderTop: '1px solid #2a2a2a'
+              borderTop: '1px solid #3a3a3a'
             }}>
               <div style={{
                 padding: '8px 10px',
@@ -361,7 +361,7 @@ export default function MCPButton({ service, onServiceChange }: MCPButtonProps) 
             <div style={{
               marginTop: '12px',
               paddingTop: '12px',
-              borderTop: '1px solid #2a2a2a'
+              borderTop: '1px solid #3a3a3a'
             }}>
               <div style={{
                 padding: '6px 10px',
@@ -390,7 +390,8 @@ export default function MCPButton({ service, onServiceChange }: MCPButtonProps) 
           // Toggle tool panel visibility
           setIsOpen(!isOpen)
         }}
-        title={`${service.name} MCP Server`}
+        title={`Source: ${service.name}`}
+        aria-label={`Source: ${service.name}`}
         data-mcp-button={service.name}
         style={{
           position: 'relative',
@@ -398,8 +399,8 @@ export default function MCPButton({ service, onServiceChange }: MCPButtonProps) 
           height: '36px',
           borderRadius: '18px',
           border: isOpen
-            ? '2px solid #4a4a4a'
-            : '1px solid #2a2a2a',
+            ? '2px solid #5a5a5a'
+            : '1px solid #3a3a3a',
           background: isOpen
             ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%)' 
             : 'rgba(20, 20, 20, 0.9)',
@@ -420,14 +421,14 @@ export default function MCPButton({ service, onServiceChange }: MCPButtonProps) 
         }}
         onMouseEnter={(e) => {
           if (!isOpen) {
-            e.currentTarget.style.borderColor = '#3a3a3a'
+            e.currentTarget.style.borderColor = '#5a5a5a'
             e.currentTarget.style.color = '#e6e6e6'
             e.currentTarget.style.transform = 'scale(1.08)'
           }
         }}
         onMouseLeave={(e) => {
           if (!isOpen) {
-            e.currentTarget.style.borderColor = '#2a2a2a'
+            e.currentTarget.style.borderColor = '#3a3a3a'
             e.currentTarget.style.color = '#bbb'
             e.currentTarget.style.transform = 'scale(1)'
           } else {
@@ -445,48 +446,31 @@ export default function MCPButton({ service, onServiceChange }: MCPButtonProps) 
             objectFit: 'contain'
           }}
         />
-        {/* Status Badge */}
-        {connectionStatus === 'disconnected' ? (
-          // Show red exclamation mark when connection fails
+        {/* Minimal corner status dot */}
+        {connectionStatus === 'connected' && (
           <div style={{
             position: 'absolute',
-            top: '-2px',
-            right: '-2px',
-            width: '16px',
-            height: '16px',
-            borderRadius: '50%',
-            background: '#ef4444',
-            border: '2px solid rgba(20, 20, 20, 0.9)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '11px',
-            fontWeight: '700',
-            color: '#0a0a0a'
-          }}>
-            !
-          </div>
-        ) : service.enabled && service.tools.filter(tool => tool.enabled).length > 0 && connectionStatus === 'connected' ? (
-          // Show green number when connected and has enabled tools
-          <div style={{
-            position: 'absolute',
-            top: '-2px',
-            right: '-2px',
-            width: '16px',
-            height: '16px',
+            top: '1px',
+            right: '1px',
+            width: '7px',
+            height: '7px',
             borderRadius: '50%',
             background: '#4ade80',
-            border: '2px solid rgba(20, 20, 20, 0.9)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '10px',
-            fontWeight: '700',
-            color: '#0a0a0a'
-          }}>
-            {service.tools.filter(tool => tool.enabled).length}
-          </div>
-        ) : null}
+            boxShadow: '0 0 0 1.5px rgba(20, 20, 20, 0.9)'
+          }} />
+        )}
+        {connectionStatus === 'disconnected' && (
+          <div style={{
+            position: 'absolute',
+            top: '1px',
+            right: '1px',
+            width: '7px',
+            height: '7px',
+            borderRadius: '50%',
+            background: '#ef4444',
+            boxShadow: '0 0 0 1.5px rgba(20, 20, 20, 0.9)'
+          }} />
+        )}
       </button>
     </div>
   )
