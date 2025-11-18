@@ -5,22 +5,22 @@
 <h1 align="center">Open Deep Wide Research</h1>
 
 <p align="center">
-  <a href="https://www.deepwideresearch.com" target="_blank">
+  <a href="https://go.deepwideresearch.com/4o5mSMy" target="_blank">
     <img src="https://img.shields.io/badge/Web-deepwideresearch.com-39BC66?style=flat&logo=google-chrome&logoColor=white" alt="Homepage" height="22" />
   </a>
-  <a href="https://x.com/PuppyAgentTech" target="_blank">
-    <img src="https://img.shields.io/badge/X-@PuppyAgentTech-000000?style=flat&logo=x&logoColor=white" alt="X (Twitter)" height="22" />
+  <a href="https://x.com/deepwiderag" target="_blank">
+    <img src="https://img.shields.io/badge/X-@deepwiderag-000000?style=flat&logo=x&logoColor=white" alt="X (Twitter)" height="22" />
   </a>
   <a href="https://discord.gg/puppychat" target="_blank">
     <img src="https://img.shields.io/badge/Discord-Join-5865F2?style=flat&logo=discord&logoColor=white" alt="Discord" height="22" />
   </a>
-  <a href="mailto:support@puppyagent.com">
-    <img src="https://img.shields.io/badge/Support-support@puppyagent.com-F44336?style=flat&logo=gmail&logoColor=white" alt="Support" height="22" />
+  <a href="mailto:guantum@puppyagent.com">
+    <img src="https://img.shields.io/badge/Support-guantum@puppyagent.com-F44336?style=flat&logo=gmail&logoColor=white" alt="Support" height="22" />
   </a>
 </p>
 
 <p align="center">
-  Agentic RAG for All <br> with depth & width
+  Agentic RAG for any scenario<br>Customize sources, depth, and width
 </p>
 
 <p align="center">
@@ -33,71 +33,60 @@ In 2025, we observed three critical trends reshaping the Retrieval-Augmented Gen
 
 1.  Traditional, Rigid, pipeline-driven RAG is giving way to more dynamic agentic RAG systems.
 
-2.  The emergence of MCP is dramatically lowering the complexity of developing enterprise-grade Agentic RAG.
+2.  The emergence of MCP is dramatically lowering the complexity of developing enterprise level Agentic RAG.
 
-3.  Developers desperately need to customize and balance response time, the breadth of information retrieval, and cost. However, most agent solution ignore this critical requirement.
+However, a core pain point remains: 
 
-Based on these trends, the market needs a single, open-source RAG agent that is MCP-compatible and offers granular control over performance, scope, and cost.
+Developers still struggle to balance response quality, speed, and cost, as most agentic solutions offer a rigid, one-size-fits-all approach.
 
-We built **Open Deep Wide Research** to be that solution, providing one agent for all RAG scenarios. Its core is the "Deep/Wide" coordinate system, which gives you the control you need:
+Based on these trends and the core pain point, the market needs a single, open-source RAG agent that is MCP-compatible and offers granular control over performance, scope, and cost.
 
-- **Deep:** Controls response time and reasoning depth.
-- **Wide:** Controls information breadth from various sources.
-- **Deep × Wide:** Predicts the cost of a single agentic RAG response.
+We built **Open Deep Wide Research** to be that solution, providing one agent for all RAG scenarios. It gives you granular control over the core dimensions of agentic research:
+
+*   **Sources**: Connect custom data sources, from internal knowledge bases to specialized APIs.
+*   **Deep**: Controls response time and reasoning depth.
+*   **Wide**: Controls information breadth across your selected sources.
+
+The "Deep × Wide" coordinate system also transparently predicts the cost of each response, giving you full budget control.
 
 **Example Scenarios:**
 
 <table>
 <thead>
 <tr>
-<th align="left"><sub>Scenario</sub></th>
+<th align="left"><sub>User Story</sub></th>
 <th align="left"><sub>Settings</sub></th>
-<th align="left"><sub>Use Case</sub></th>
+<th align="left"><sub>Example Query</sub></th>
 <th align="center"><sub>Time</sub></th>
 <th align="center"><sub>Cost</sub></th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td align="left"><sub><b>Quick Chat</b></sub></td>
+<td align="left"><sub><b>Customer Service Bot</b></sub></td>
 <td align="left"><sub>Deep: <code>███░░░░░░░░░</code> 25%<br/>Wide: <code>███░░░░░░░░░</code> 25%</sub></td>
-<td align="left"><sub>Fast Q&A</sub></td>
-<td align="center"><sub>~5-10s</sub></td>
-<td align="center"><sub>$0.05</sub></td>
+<td align="left"><sub>"What glasses do you provide?"</sub></td>
+<td align="center"><sub>~10s</sub></td>
+<td align="center"><sub>~$0.01</sub></td>
 </tr>
 <tr>
-<td align="left"><sub><b>Deep Analysis</b></sub></td>
-<td align="left"><sub>Deep: <code>████████████</code> 100%<br/>Wide: <code>███░░░░░░░░░</code> 25%</sub></td>
-<td align="left"><sub>Technical deep dive</sub></td>
-<td align="center"><sub>~1-2min</sub></td>
-<td align="center"><sub>$0.30-0.50</sub></td>
-</tr>
-<tr>
-<td align="left"><sub><b>Wide Survey</b></sub></td>
+<td align="left"><sub><b>Market Research</b></sub></td>
 <td align="left"><sub>Deep: <code>███░░░░░░░░░</code> 25%<br/>Wide: <code>████████████</code> 100%</sub></td>
-<td align="left"><sub>Broad market research</sub></td>
-<td align="center"><sub>~30-60s</sub></td>
-<td align="center"><sub>$0.20-0.40</sub></td>
+<td align="left"><sub>"100 Notion and Airtable alternatives"</sub></td>
+<td align="center"><sub>~2-3min</sub></td>
+<td align="center"><sub>~$0.10</sub></td>
 </tr>
 <tr>
-<td align="left"><sub><b>Balanced Research</b></sub></td>
-<td align="left"><sub>Deep: <code>██████░░░░░░</code> 50%<br/>Wide: <code>██████░░░░░░</code> 50%</sub></td>
-<td align="left"><sub>General research</sub></td>
-<td align="center"><sub>~1-2min</sub></td>
-<td align="center"><sub>$0.30-0.60</sub></td>
-</tr>
-<tr>
-<td align="left"><sub><b>Ultra Deep Dive</b></sub></td>
+<td align="left"><sub><b>Enterprise Analytics</b></sub></td>
 <td align="left"><sub>Deep: <code>████████████</code> 100%<br/>Wide: <code>████████████</code> 100%</sub></td>
-<td align="left"><sub>Maximum depth & breadth</sub></td>
+<td align="left"><sub>"What was the ROI of our latest marketing campaign?"</sub></td>
 <td align="center"><sub>~5min</sub></td>
-<td align="center"><sub>$0.50-2.00</sub></td>
+<td align="center"><sub>~$1.00</sub></td>
 </tr>
 </tbody>
 </table>
 
 > If this mission resonates with you, please give us a star ⭐ and fork it! 🤞
-
 
 ## Features
 
