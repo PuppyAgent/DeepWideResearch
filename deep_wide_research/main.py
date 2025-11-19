@@ -696,10 +696,6 @@ async def research_stream_generator(request: ResearchRequest):
         
         print(f"\n🔍 Received research request: {request.message.query}")
         print(f"📊 Deep: {request.message.deepwide.deep}, Wide: {request.message.deepwide.wide}")
-        try:
-            print(f"🧠 Requested model: {request.message.deepwide.model or 'None (will use default)'}")
-        except Exception:
-            pass
         
         # Execute research and stream updates
         async for update in run_deep_research_stream(
