@@ -73,10 +73,18 @@ async def chat_complete(
         max_tokens=max_tokens,
     )
     
-    return ChatResponse(
-        content=resp.choices[0].message.content or "",
-        raw=resp
-    )
+    # Be defensive: choices/message may be missing in rare cases
+    content_text = ""
+    try:
+        choices = getattr(resp, "choices", None)
+        if isinstance(choices, list) and len(choices) > 0:
+            message = getattr(choices[0], "message", None)
+            if message is not None:
+                content_text = getattr(message, "content", "") or ""
+    except Exception:
+        content_text = ""
+    
+    return ChatResponse(content=content_text, raw=resp)
 
 
 async def chat_complete_stream(
@@ -99,8 +107,20 @@ async def chat_complete_stream(
     )
     
     async for chunk in stream:
-        if chunk.choices[0].delta.content:
-            yield chunk.choices[0].delta.content
+        # Guard against empty/irregular frames (e.g., heartbeats, role-only deltas)
+        try:
+            choices = getattr(chunk, "choices", None)
+            if not (isinstance(choices, list) and len(choices) > 0):
+                continue
+            delta = getattr(choices[0], "delta", None)
+            if delta is None:
+                continue
+            piece = getattr(delta, "content", None)
+            if piece:
+                yield piece
+        except Exception:
+            # Skip malformed frames without failing the whole stream
+            continue
 
 
 if __name__ == "__main__":
