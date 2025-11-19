@@ -5,6 +5,7 @@ import React, { useState, useRef } from 'react'
 export interface DeepWideModelProps {
   researchParams: { deep: number; wide: number; model?: string }
   onResearchParamsChange: (value: { deep: number; wide: number; model?: string }) => void
+  menuDirection?: 'up' | 'down'
 }
 
 const AVAILABLE_MODELS = [
@@ -16,7 +17,8 @@ const AVAILABLE_MODELS = [
 
 export default function DeepWideModel({
   researchParams,
-  onResearchParamsChange
+  onResearchParamsChange,
+  menuDirection = 'up'
 }: DeepWideModelProps) {
   const [isDeepWideHover, setIsDeepWideHover] = useState(false)
   const [isModelHover, setIsModelHover] = useState(false)
@@ -100,9 +102,11 @@ export default function DeepWideModel({
         {showModelMenu && (
           <div style={{
             position: 'absolute',
-            bottom: '100%', // Show above
+            ...(menuDirection === 'up' 
+              ? { bottom: '100%', marginBottom: '4px' } 
+              : { top: '100%', marginTop: '4px' }
+            ),
             left: 0,
-            marginBottom: '4px',
             background: '#1a1a1a',
             border: '1px solid #333',
             borderRadius: '8px',

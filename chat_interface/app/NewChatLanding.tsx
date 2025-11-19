@@ -223,6 +223,7 @@ export default function NewChatLanding({
                 <DeepWideModel
                   researchParams={researchParams}
                   onResearchParamsChange={onResearchParamsChange}
+                  menuDirection="down"
                 />
               </div>
               <button
