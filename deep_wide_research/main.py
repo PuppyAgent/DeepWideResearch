@@ -609,16 +609,17 @@ def _update_profile_plan(user_id: str, plan: str) -> None:
         pass
 
 def _compute_credits_from_params(deep: float, wide: float) -> int:
-    """Compute credits as: 4 + deep * wide * 16, then clamp to [5, 20]."""
+    """Compute credits as: 2 × round(4 + deep * wide * 16), then clamp to [10, 40]."""
     try:
         raw = 4.0 + (float(deep) * float(wide) * 16.0)
     except Exception:
         raw = 4.0
-    units = int(round(raw))
-    if units < 5:
-        units = 5
-    if units > 20:
-        units = 20
+    base_units = int(round(raw))
+    units = base_units * 2
+    if units < 10:
+        units = 10
+    if units > 40:
+        units = 40
     return units
 
 class Message(BaseModel):
