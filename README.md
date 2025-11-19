@@ -102,23 +102,84 @@ The "Deep × Wide" coordinate system also transparently predicts the cost of eac
 ## Get Started
 
 ### Prerequisites
-- Python 3.9+ and Node.js 18+
-- API keys: Open Router (required), and  Exa / Tavily (at least one)
-- Recommended model: open-o4mini
+
+#### Python 3.9+ Installation
+
+**Windows:**
+- Download from [python.org](https://www.python.org/downloads/) or use Windows Store
+- Or use Chocolatey: `choco install python`
+- Or use winget: `winget install Python.Python.3.11`
+
+**macOS:**
+- Using Homebrew: `brew install python@3.11`
+- Or download from [python.org](https://www.python.org/downloads/)
+
+**Linux (Ubuntu/Debian):**
+```bash
+sudo apt update
+sudo apt install python3 python3-pip python3-venv
+```
+
+**Linux (Fedora/RHEL):**
+```bash
+sudo dnf install python3 python3-pip
+```
+
+#### Node.js 18+ Installation
+
+**Windows:**
+- Download from [nodejs.org](https://nodejs.org/) or use Windows Store
+- Or use Chocolatey: `choco install nodejs`
+- Or use winget: `winget install OpenJS.NodeJS`
+
+**macOS:**
+- Using Homebrew: `brew install node`
+- Or download from [nodejs.org](https://nodejs.org/)
+
+**Linux (Ubuntu/Debian):**
+```bash
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+```
+
+**Linux (Fedora/RHEL):**
+```bash
+curl -fsSL https://rpm.nodesource.com/setup_20.x | sudo bash -
+sudo dnf install -y nodejs
+```
+
+#### API Keys
+- **OpenRouter API Key** (required): Get from [OpenRouter](https://openrouter.ai/)
+- **Exa API Key** (at least one required): Get from [Exa](https://exa.ai/)
+- **Tavily API Key** (at least one required): Get from [Tavily](https://www.tavily.com/)
+- **Recommended model**: `openai/o4-mini`
 
 ### Deployment Options
-- API-only (Backend): If you only need the Deep Research backend as an API to embed in your codebase, deploy the backend only.
-- Full stack (Frontend + Backend): If you want the full experience with the web UI, deploy both the backend and the frontend.
+- **API-only (Backend)**: If you only need the Deep Research backend as an API to embed in your codebase, deploy the backend only.
+- **Full stack (Frontend + Backend)**: If you want the full experience with the web UI, deploy both the backend and the frontend.
 
 ### Backend
 
-1. Copy the env template:
+#### Step 1: Copy Environment Template
 
+**Windows (PowerShell):**
+```powershell
+Copy-Item deep_wide_research\env.example deep_wide_research\.env
+```
+
+**Windows (CMD):**
+```cmd
+copy deep_wide_research\env.example deep_wide_research\.env
+```
+
+**macOS/Linux:**
 ```bash
 cp deep_wide_research/env.example deep_wide_research/.env
 ```
 
-2. Edit the copied .env and set your keys:
+#### Step 2: Configure Environment Variables
+
+Edit `deep_wide_research/.env` and set your API keys:
 
 ```bash
 # deep_wide_research/.env
@@ -129,42 +190,127 @@ EXA_API_KEY=your_exa_key
 TAVILY_API_KEY=your_tavily_key
 ```
 
-> You can obtain the Tavily and Exa API keys from their official sites: [Tavily](https://www.tavily.com/) and [Exa](https://exa.ai/).
+#### Step 3: Set Up Python Environment
 
-3. Set up the environment:
+**Option A: Using pip (Recommended)**
 
-```bash
+**Windows:**
+```powershell
 cd deep_wide_research
 python -m venv deep-wide-research
+.\deep-wide-research\Scripts\Activate.ps1
+pip install -r requirements.txt
+```
+
+**macOS/Linux:**
+```bash
+cd deep_wide_research
+python3 -m venv deep-wide-research
 source deep-wide-research/bin/activate
 pip install -r requirements.txt
 ```
 
-4. Start the backend server:
+**Option B: Using conda**
 
+**All Platforms:**
 ```bash
+cd deep_wide_research
+conda create -n deep-wide-research python=3.11
+conda activate deep-wide-research
+pip install -r requirements.txt
+```
+
+#### Step 4: Start Backend Server
+
+**Windows:**
+```powershell
 python main.py
 ```
 
+**macOS/Linux:**
+```bash
+python main.py
+# or
+python3 main.py
+```
+
+The backend will start on `http://localhost:8000` by default.
+
 ### Frontend
 
-1. Copy the env template:
+#### Step 1: Copy Environment Template
 
+**Windows (PowerShell):**
+```powershell
+Copy-Item chat_interface\env.example chat_interface\.env.local
+```
+
+**Windows (CMD):**
+```cmd
+copy chat_interface\env.example chat_interface\.env.local
+```
+
+**macOS/Linux:**
 ```bash
 cp chat_interface/env.example chat_interface/.env.local
 ```
 
-2. Install dependencies and start the dev server:
+#### Step 2: Install Dependencies
 
+**Option A: Using npm (Default)**
+
+**All Platforms:**
 ```bash
 cd chat_interface
 npm install
+```
+
+**Option B: Using yarn**
+
+**Install yarn first (if not installed):**
+- Windows: `choco install yarn` or `winget install Yarn.Yarn`
+- macOS: `brew install yarn`
+- Linux: `npm install -g yarn` or follow [yarn installation guide](https://yarnpkg.com/getting-started/install)
+
+**Then install dependencies:**
+```bash
+cd chat_interface
+yarn install
+```
+
+**Option C: Using pnpm**
+
+**Install pnpm first (if not installed):**
+- Windows: `choco install pnpm` or `winget install pnpm`
+- macOS: `brew install pnpm`
+- Linux: `npm install -g pnpm` or follow [pnpm installation guide](https://pnpm.io/installation)
+
+**Then install dependencies:**
+```bash
+cd chat_interface
+pnpm install
+```
+
+#### Step 3: Start Development Server
+
+**Using npm:**
+```bash
 npm run dev
 ```
 
-3. Open the app:
+**Using yarn:**
+```bash
+yarn dev
+```
 
-Open **http://localhost:3000** – Start researching in seconds.
+**Using pnpm:**
+```bash
+pnpm dev
+```
+
+#### Step 4: Open the Application
+
+Open **http://localhost:3000** in your browser – Start researching in seconds.
 
 ### Docker (Production)
 
