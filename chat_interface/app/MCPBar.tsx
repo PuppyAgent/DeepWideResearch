@@ -330,7 +330,7 @@ function AddMCPButton({ removedServices, onRestoreService, onAddSourceClick }: A
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
             <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-          <span style={{ fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.3px' }}>source</span>
+          <span style={{ fontSize: '12px', fontWeight: 400 }}>Source</span>
       </button>
       </div>
     </div>

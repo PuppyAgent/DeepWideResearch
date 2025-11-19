@@ -5,10 +5,11 @@ import ChatMain, { type ChatMainProps } from '../components/ChatMain'
 import MCPBar, { type McpConfigValue } from './MCPBar'
 import AddSourcePanel from './AddSourcePanel'
 import NewChatLanding from './NewChatLanding'
+import DeepWideModel from './DeepWideModel'
 
 export interface ChatPanelProps extends ChatMainProps {
-  researchParams: { deep: number; wide: number }
-  onResearchParamsChange: (value: { deep: number; wide: number }) => void
+  researchParams: { deep: number; wide: number; model?: string }
+  onResearchParamsChange: (value: { deep: number; wide: number; model?: string }) => void
   mcpConfig: McpConfigValue
   onMcpConfigChange: (value: McpConfigValue) => void
   placeholder?: string
@@ -34,9 +35,6 @@ export default function ChatPanel({
   const [hasSentFirstMessage, setHasSentFirstMessage] = React.useState(false)
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
   const [suggestionIndex, setSuggestionIndex] = React.useState(0)
-  const [isDeepWideHover, setIsDeepWideHover] = React.useState(false)
-  const deepBlocksRef = React.useRef<HTMLSpanElement>(null)
-  const wideBlocksRef = React.useRef<HTMLSpanElement>(null)
   const [isAddSourceOpen, setIsAddSourceOpen] = React.useState(false)
   const recommendedQuestions = [
     'What were the 2025 Nobel Prizes awarded for?',
@@ -54,15 +52,6 @@ export default function ChatPanel({
     return await performStreamingSend(text)
   }
 
-
-  // Deep/Wide inline bar helpers (match NewChatLanding)
-  const BAR_LEN = 12
-  const STEPS = 4
-  const makeBlocks = (v: number) => {
-    const filled = Math.round(v * BAR_LEN)
-    const empty = Math.max(0, BAR_LEN - filled)
-    return `${'█'.repeat(filled)}${'░'.repeat(empty)}`
-  }
 
   const handleSend = async () => {
     if (!inputValue.trim() || disabled || !onSendMessage) return
@@ -191,73 +180,11 @@ export default function ChatPanel({
             paddingRight: '32px'
           }}>
             {/* Inline Deep/Wide bar (match NewChatLanding styling) */}
-            <div
-              data-deepwide-inline-trigger
-              onMouseEnter={() => setIsDeepWideHover(true)}
-              onMouseLeave={() => setIsDeepWideHover(false)}
-              title="Adjust Deep × Wide"
-              style={{
-                fontSize: '12px',
-                color: isDeepWideHover ? '#e5e5e5' : '#888',
-                fontFamily: 'inherit, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
-                lineHeight: '1.25',
-                whiteSpace: 'pre',
-                cursor: 'ew-resize',
-                userSelect: 'none',
-                transition: 'color 150ms ease, background 150ms ease',
-                padding: '2px 8px',
-                borderRadius: '8px',
-                background: isDeepWideHover ? 'rgba(255,255,255,0.04)' : 'transparent',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'flex-start',
-                gap: '2px'
-              }}
-            >
-              <div
-                onClick={(e) => {
-                  const targetSpan = deepBlocksRef.current
-                  if (!targetSpan) return
-                  const barRect = targetSpan.getBoundingClientRect()
-                  let xWithin = e.clientX - barRect.left
-                  xWithin = Math.max(0, Math.min(barRect.width - 1, xWithin))
-                  const bucketPx = barRect.width / STEPS
-                  const stepIndex = Math.floor(xWithin / bucketPx)
-                  const next = (stepIndex + 1) / STEPS
-                  onResearchParamsChange({ deep: next, wide: researchParams.wide })
-                }}
-                style={{ display: 'flex', alignItems: 'center', gap: '2px', padding: 0, borderRadius: '6px', cursor: 'inherit' }}
-              >
-                <span style={{ fontFamily: 'inherit', fontWeight: 400 }}>DEEP</span>
-                <span style={{ margin: '0 2px' }} />
-                <span ref={deepBlocksRef} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>
-                  {makeBlocks(researchParams.deep)}
-                </span>
-                <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', display: 'inline-block', width: '4ch', textAlign: 'right' }}>{Math.round(researchParams.deep * 100)}%</span>
-              </div>
-              <div
-                style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '2px', padding: 0, borderRadius: '6px', cursor: 'inherit' }}
-                onClick={(e) => {
-                  const targetSpan = wideBlocksRef.current
-                  if (!targetSpan) return
-                  const barRect = targetSpan.getBoundingClientRect()
-                  let xWithin = e.clientX - barRect.left
-                  xWithin = Math.max(0, Math.min(barRect.width - 1, xWithin))
-                  const bucketPx = barRect.width / STEPS
-                  const stepIndex = Math.floor(xWithin / bucketPx)
-                  const next = (stepIndex + 1) / STEPS
-                  onResearchParamsChange({ deep: researchParams.deep, wide: next })
-                }}
-              >
-                <span style={{ fontFamily: 'inherit', fontWeight: 400 }}>WIDE</span>
-                <span style={{ margin: '0 2px' }} />
-                <span ref={wideBlocksRef} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>
-                  {makeBlocks(researchParams.wide)}
-                </span>
-                <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', display: 'inline-block', width: '4ch', textAlign: 'right' }}>{Math.round(researchParams.wide * 100)}%</span>
-              </div>
-            </div>
-            <div style={{ width: '1px', height: '24px', background: '#2a2a2a' }} />
+            <DeepWideModel
+              researchParams={researchParams}
+              onResearchParamsChange={onResearchParamsChange}
+            />
+            <div style={{ width: '1px', height: '24px', background: '#333', marginLeft: '8px', marginRight: '8px' }} />
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <MCPBar value={mcpConfig} onChange={onMcpConfigChange} onAddSourceClick={() => setIsAddSourceOpen(true)} />
             </div>

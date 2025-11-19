@@ -24,12 +24,12 @@
 </p>
 
 <p align="center">
-  <img src="chat_interface/public/chatinterface.png" alt="Deep & Wide Research Chat Interface" width="600" />
+  <img src="chat_interface/public/chat_interface.png" alt="Deep & Wide Research Chat Interface" />
 </p>
 
 ## Why Do You Need Open Deep Wide Research?
 
-In 2025, we observed three critical trends reshaping the Retrieval-Augmented Generation (RAG) tech stacks:
+In 2025, we observed 2 critical trends reshaping the Retrieval-Augmented Generation (RAG) tech stacks:
 
 1.  Traditional, Rigid, pipeline-driven RAG is giving way to more dynamic agentic RAG systems.
 
@@ -37,7 +37,7 @@ In 2025, we observed three critical trends reshaping the Retrieval-Augmented Gen
 
 However, a core pain point remains: 
 
-Developers still struggle to balance response quality, speed, and cost, as most agentic solutions offer a rigid, one-size-fits-all approach.
+1. **Developers still struggle to balance response quality, speed, and cost, as most agentic solutions offer a rigid, one-size-fits-all approach.**
 
 Based on these trends and the core pain point, the market needs a single, open-source RAG agent that is MCP-compatible and offers granular control over performance, scope, and cost.
 

@@ -67,61 +67,16 @@ class Configuration:
         self.final_report_model_max_tokens = int(os.getenv("FINAL_REPORT_MODEL_MAX_TOKENS", "128000"))
         self.mcp_prompt = None
 
-MODEL_GRID = [
-    # deep = 0.25
-    [
-        ("openai/gpt-4.1", "openai/gpt-4.1"),   # wide = 0.25
-        ("openai/gpt-4.1", "openai/gpt-4.1"),   # wide = 0.5
-        ("openai/gpt-4.1", "openai/gpt-4.1"),   # wide = 0.75
-        ("openai/gpt-4.1", "openai/gpt-4.1"),   # wide = 1.0
-    ],
-    # deep = 0.5
-    [
-        ("openai/gpt-4.1", "openai/gpt-5"),   # wide = 0.25
-        ("openai/gpt-4.1", "openai/gpt-5"),   # wide = 0.5
-        ("openai/gpt-4.1", "openai/gpt-5"),   # wide = 0.75
-        ("openai/gpt-4.1", "openai/gpt-5"),   # wide = 1.0
-    ],
-    # deep = 0.75
-    [
-        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.25
-        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.5
-        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.75
-        ("openai/gpt-5", "openai/gpt-5"),   # wide = 1.0
-    ],
-    # deep = 1.0
-    [
-        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.25
-        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.5
-        ("openai/gpt-5", "openai/gpt-5"),   # wide = 0.75
-        ("openai/gpt-5", "openai/gpt-5"),   # wide = 1.0
-    ],
-]
+def _apply_model_mapping_to_cfg(cfg: Configuration, deep_param: float, wide_param: float, selected_model: Optional[str] = None) -> None:
+    if selected_model:
+        print(f"[DeepWideResearch] Using user-selected model: {selected_model}")
+        cfg.research_model = selected_model
+        cfg.final_report_model = selected_model
+    else:
+        # No specific model selected by user, fallback to default if not already set by env
+        # (defaults are already set in Configuration.__init__)
+        print(f"[DeepWideResearch] No user model selected, using default: {cfg.research_model}")
 
-
-def _index_for_param(x: float) -> int:
-    """Map a float in [0,1] to index {0,1,2,3} using simple thresholds."""
-    try:
-        v = float(x)
-    except Exception:
-        v = 0.5
-    if v < 0.25:
-        return 0
-    if v < 0.5:
-        return 0  # <0.5 → 0.25 bucket
-    if v < 0.75:
-        return 1  # [0.5,0.75) → 0.5 bucket
-    if v < 1.0:
-        return 2  # [0.75,1.0) → 0.75 bucket
-    return 3       # >=1.0 → 1.0 bucket
-
-
-def _apply_model_mapping_to_cfg(cfg: Configuration, deep_param: float, wide_param: float) -> None:
-    di = _index_for_param(deep_param)
-    wi = _index_for_param(wide_param)
-    research_model, final_model = MODEL_GRID[di][wi]
-    cfg.research_model = research_model
-    cfg.final_report_model = final_model
 
 
 # ===================== Unified Context (sources) Helpers =====================
@@ -134,7 +89,7 @@ except ImportError:
         build_context_from_raw_notes = None
 
 
-async def run_deep_research_stream(user_messages: List[str], cfg: Optional[Configuration] = None, api_keys: Optional[dict] = None, mcp_config: Optional[Dict[str, List[str]]] = None, deep_param: float = 0.5, wide_param: float = 0.5):
+async def run_deep_research_stream(user_messages: List[str], cfg: Optional[Configuration] = None, api_keys: Optional[dict] = None, mcp_config: Optional[Dict[str, List[str]]] = None, deep_param: float = 0.5, wide_param: float = 0.5, selected_model: Optional[str] = None):
     """Streaming version of the deep research flow: Research → Generate
     
     Yields:
@@ -142,7 +97,7 @@ async def run_deep_research_stream(user_messages: List[str], cfg: Optional[Confi
     """
     cfg = cfg or Configuration()
     # Dynamically select models based on deep & wide from frontend
-    _apply_model_mapping_to_cfg(cfg, deep_param, wide_param)
+    _apply_model_mapping_to_cfg(cfg, deep_param, wide_param, selected_model)
     # Anchor request start time at server entry and init timing aggregator
     cfg.request_start_ts = time.perf_counter()
     if not hasattr(cfg, "_timing_events"):
@@ -322,7 +277,7 @@ async def run_deep_research_stream(user_messages: List[str], cfg: Optional[Confi
         pass
 
 
-async def run_deep_research(user_messages: List[str], cfg: Optional[Configuration] = None, api_keys: Optional[dict] = None, mcp_config: Optional[Dict[str, List[str]]] = None, deep_param: float = 0.5, wide_param: float = 0.5) -> dict:
+async def run_deep_research(user_messages: List[str], cfg: Optional[Configuration] = None, api_keys: Optional[dict] = None, mcp_config: Optional[Dict[str, List[str]]] = None, deep_param: float = 0.5, wide_param: float = 0.5, selected_model: Optional[str] = None) -> dict:
     """Full deep research flow: Research → Generate
     
     Args:
@@ -335,7 +290,7 @@ async def run_deep_research(user_messages: List[str], cfg: Optional[Configuratio
     """
     cfg = cfg or Configuration()
     # Dynamically select models based on deep & wide from frontend
-    _apply_model_mapping_to_cfg(cfg, deep_param, wide_param)
+    _apply_model_mapping_to_cfg(cfg, deep_param, wide_param, selected_model)
     # Anchor request start time at server entry and init timing aggregator
     cfg.request_start_ts = time.perf_counter()
     if not hasattr(cfg, "_timing_events"):
