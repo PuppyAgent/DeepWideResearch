@@ -3,10 +3,11 @@
 import React from 'react'
 import MCPBar, { type McpConfigValue } from './MCPBar'
 import AddSourcePanel from './AddSourcePanel'
+import DeepWideModel from './DeepWideModel'
 
 export interface NewChatLandingProps {
-  researchParams: { deep: number; wide: number }
-  onResearchParamsChange: (value: { deep: number; wide: number }) => void
+  researchParams: { deep: number; wide: number; model?: string }
+  onResearchParamsChange: (value: { deep: number; wide: number; model?: string }) => void
   mcpConfig: McpConfigValue
   onMcpConfigChange: (value: McpConfigValue) => void
   placeholder?: string
@@ -38,8 +39,19 @@ export default function NewChatLanding({
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
   const [suggestionIndex, setSuggestionIndex] = React.useState(0)
   const [isAddSourceOpen, setIsAddSourceOpen] = React.useState(false)
+  const [isModelHover, setIsModelHover] = React.useState(false)
+  const [showModelMenu, setShowModelMenu] = React.useState(false)
+  const modelMenuRef = React.useRef<HTMLDivElement>(null)
 
   const isBusy = !!externalIsTyping || !!externalIsStreaming
+
+  const AVAILABLE_MODELS = [
+    { label: 'GPT-5.1', value: 'openai/gpt-5' },
+    { label: 'Gemini 3', value: 'google/gemini-3' },
+    { label: 'o4-mini', value: 'openai/o4-mini' },
+    { label: 'GPT-4o', value: 'openai/gpt-4o' }
+  ]
+  const selectedModelLabel = AVAILABLE_MODELS.find(m => m.value === researchParams.model)?.label || 'Select Model'
 
   const handleSend = async () => {
     if (!inputValue.trim() || disabled || !onSendMessage) return
@@ -207,127 +219,11 @@ export default function NewChatLanding({
             />
             {/* Controls row: Deep/Wide bars (left) + Send button (right) */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div
-                data-deepwide-inline-trigger
-                onMouseEnter={() => setIsDeepWideHover(true)}
-                onMouseLeave={() => setIsDeepWideHover(false)}
-                style={{ fontSize: '12px', color: isDeepWideHover ? '#e5e5e5' : '#888', fontFamily: 'inherit, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', lineHeight: '1.25', whiteSpace: 'pre', cursor: 'ew-resize', userSelect: 'none', transition: 'color 150ms ease, background 150ms ease', paddingLeft: '8px', paddingRight: '8px', paddingTop: '2px', paddingBottom: '2px', borderRadius: '8px', background: isDeepWideHover ? 'rgba(255,255,255,0.04)' : 'transparent', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '2px' }}
-                title="Adjust Deep × Wide"
-              >
-                <div
-                  onClick={(e) => {
-                    const targetSpan = deepBlocksRef.current
-                    if (!targetSpan) return
-                    const barRect = targetSpan.getBoundingClientRect()
-                    let xWithin = e.clientX - barRect.left
-                    xWithin = Math.max(0, Math.min(barRect.width - 1, xWithin))
-                    const bucketPx = barRect.width / STEPS
-                    const stepIndex = Math.floor(xWithin / bucketPx)
-                    const next = (stepIndex + 1) / STEPS
-                    onResearchParamsChange({ deep: next, wide: researchParams.wide })
-                  }}
-                  style={{ display: 'flex', alignItems: 'center', gap: '2px', padding: 0, borderRadius: '6px', cursor: 'inherit' }}
-                >
-                  <span style={{ fontFamily: 'inherit', fontWeight: 400 }}>DEEP</span>
-                  <span style={{ margin: '0 2px' }} />
-                  <span ref={deepBlocksRef} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>
-                    {makeBlocks(researchParams.deep)}
-                  </span>
-                  <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', display: 'inline-block', width: '4ch', textAlign: 'right' }}>{Math.round(researchParams.deep * 100)}%</span>
-                  <div style={{ display: 'flex', gap: '4px', opacity: isDeepWideHover ? 1 : 0, transition: 'opacity 150ms ease', marginLeft: '2px' }}>
-                    <button
-                      type="button"
-                      title="Decrease depth"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        const step = 0.25
-                        const next = Math.max(step, Math.round((researchParams.deep - step) / step) * step)
-                        onResearchParamsChange({ deep: next, wide: researchParams.wide })
-                      }}
-                      style={{ width: '16px', height: '16px', borderRadius: '8px', border: 'none', background: 'transparent', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
-                      onMouseEnter={(e) => { e.currentTarget.style.color = '#e6e6e6' }}
-                      onMouseLeave={(e) => { e.currentTarget.style.color = '#888' }}
-                    >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
-                        <path d="M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      title="Increase depth"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        const step = 0.25
-                        const next = Math.min(1, Math.round((researchParams.deep + step) / step) * step)
-                        onResearchParamsChange({ deep: next, wide: researchParams.wide })
-                      }}
-                      style={{ width: '16px', height: '16px', borderRadius: '8px', border: 'none', background: 'transparent', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
-                      onMouseEnter={(e) => { e.currentTarget.style.color = '#e6e6e6' }}
-                      onMouseLeave={(e) => { e.currentTarget.style.color = '#888' }}
-                    >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-                <div
-                  style={{ marginTop: 0, display: 'flex', alignItems: 'center', gap: '2px', padding: 0, borderRadius: '6px', cursor: 'inherit' }}
-                  onClick={(e) => {
-                    const targetSpan = wideBlocksRef.current
-                    if (!targetSpan) return
-                    const barRect = targetSpan.getBoundingClientRect()
-                    let xWithin = e.clientX - barRect.left
-                    xWithin = Math.max(0, Math.min(barRect.width - 1, xWithin))
-                    const bucketPx = barRect.width / STEPS
-                    const stepIndex = Math.floor(xWithin / bucketPx)
-                    const next = (stepIndex + 1) / STEPS
-                    onResearchParamsChange({ deep: researchParams.deep, wide: next })
-                  }}
-                >
-                  <span style={{ fontFamily: 'inherit', fontWeight: 400 }}>WIDE</span>
-                  <span style={{ margin: '0 2px' }} />
-                  <span ref={wideBlocksRef} style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace' }}>
-                    {makeBlocks(researchParams.wide)}
-                  </span>
-                  <span style={{ fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace', display: 'inline-block', width: '4ch', textAlign: 'right' }}>{Math.round(researchParams.wide * 100)}%</span>
-                  <div style={{ display: 'flex', gap: '4px', opacity: isDeepWideHover ? 1 : 0, transition: 'opacity 150ms ease', marginLeft: '2px' }}>
-                    <button
-                      type="button"
-                      title="Decrease width"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        const step = 0.25
-                        const next = Math.max(step, Math.round((researchParams.wide - step) / step) * step)
-                        onResearchParamsChange({ deep: researchParams.deep, wide: next })
-                      }}
-                      style={{ width: '16px', height: '16px', borderRadius: '8px', border: 'none', background: 'transparent', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
-                      onMouseEnter={(e) => { e.currentTarget.style.color = '#e6e6e6' }}
-                      onMouseLeave={(e) => { e.currentTarget.style.color = '#888' }}
-                    >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
-                        <path d="M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                      </svg>
-                    </button>
-                    <button
-                      type="button"
-                      title="Increase width"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        const step = 0.25
-                        const next = Math.min(1, Math.round((researchParams.wide + step) / step) * step)
-                        onResearchParamsChange({ deep: researchParams.deep, wide: next })
-                      }}
-                      style={{ width: '16px', height: '16px', borderRadius: '8px', border: 'none', background: 'transparent', color: '#888', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}
-                      onMouseEnter={(e) => { e.currentTarget.style.color = '#e6e6e6' }}
-                      onMouseLeave={(e) => { e.currentTarget.style.color = '#888' }}
-                    >
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                      </svg>
-                    </button>
-                  </div>
-                </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <DeepWideModel
+                  researchParams={researchParams}
+                  onResearchParamsChange={onResearchParamsChange}
+                />
               </div>
               <button
               onClick={handleSend}

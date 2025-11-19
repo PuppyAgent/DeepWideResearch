@@ -57,7 +57,11 @@ export default function Home() {
   } = useSession()
 
   // UI state
-  const [researchParams, setResearchParams] = useState<{ deep: number; wide: number }>({ deep: 1.0, wide: 1.0 })
+  const [researchParams, setResearchParams] = useState<{ deep: number; wide: number; model?: string }>({ 
+    deep: 1.0, 
+    wide: 1.0,
+    model: 'google/gemini-3-pro-preview' // Default model
+  })
   const [sidebarWidth, setSidebarWidth] = useState(240)
   const [isSidebarMenuOpen, setIsSidebarMenuOpen] = useState(false)
   const [isDevModeOpen, setIsDevModeOpen] = useState(false)
@@ -287,7 +291,8 @@ export default function Home() {
           query: message,
           deepwide: {
             deep: researchParams.deep,
-            wide: researchParams.wide
+            wide: researchParams.wide,
+            model: researchParams.model
           },
             mcp: mcpConfig.services.reduce((acc, service) => {
               // Only include enabled services and their tools

@@ -631,6 +631,7 @@ class DeepWideParams(BaseModel):
     """Depth and breadth parameter model"""
     deep: float = 0.5  # Depth parameter (0-1), controls research depth
     wide: float = 0.5  # Breadth parameter (0-1), controls research breadth
+    model: Optional[str] = None  # Selected model to override grid
 
 
 class ResearchMessage(BaseModel):
@@ -695,6 +696,10 @@ async def research_stream_generator(request: ResearchRequest):
         
         print(f"\n🔍 Received research request: {request.message.query}")
         print(f"📊 Deep: {request.message.deepwide.deep}, Wide: {request.message.deepwide.wide}")
+        try:
+            print(f"🧠 Requested model: {request.message.deepwide.model or 'None (will use default)'}")
+        except Exception:
+            pass
         
         # Execute research and stream updates
         async for update in run_deep_research_stream(
@@ -703,7 +708,8 @@ async def research_stream_generator(request: ResearchRequest):
             api_keys=None,
             mcp_config=request.message.mcp,
             deep_param=request.message.deepwide.deep,
-            wide_param=request.message.deepwide.wide
+            wide_param=request.message.deepwide.wide,
+            selected_model=request.message.deepwide.model
         ):
             yield f"data: {json.dumps(update)}\n\n"
             
@@ -735,12 +741,14 @@ async def research(request: ResearchRequest, req: Request):
             rid = request.request_id or f"{user_id}-{int(time.time()*1000)}"
             deep_val = float(getattr(request.message.deepwide, "deep", 0.5))
             wide_val = float(getattr(request.message.deepwide, "wide", 0.5))
+            model_val = getattr(request.message.deepwide, "model", None)
             units = _compute_credits_from_params(deep_val, wide_val)
             meta = {
                 "endpoint": "/api/research",
                 "version": "1.0.0",
                 "deep": deep_val,
                 "wide": wide_val,
+                "model": model_val,
                 "thread_id": getattr(request.message, "thread_id", None),
                 "auth": auth_method,
                 "api_key_prefix": (api_key_rec.get("prefix") if api_key_rec else None),
