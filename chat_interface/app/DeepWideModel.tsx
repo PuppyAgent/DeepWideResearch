@@ -23,8 +23,8 @@ export default function DeepWideModel({
   const [isDeepWideHover, setIsDeepWideHover] = useState(false)
   const [isModelHover, setIsModelHover] = useState(false)
   const [showModelMenu, setShowModelMenu] = useState(false)
-  const deepBlocksRef = useRef<HTMLSpanElement>(null)
-  const wideBlocksRef = useRef<HTMLSpanElement>(null)
+  const deepBlocksRef = useRef<HTMLDivElement>(null)
+  const wideBlocksRef = useRef<HTMLDivElement>(null)
   const modelMenuRef = useRef<HTMLDivElement>(null)
 
   // Close model menu on outside click
@@ -39,7 +39,6 @@ export default function DeepWideModel({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const BAR_LEN = 12
   const STEPS = 4
 
   const getProviderLogoPath = (modelValue?: string) => {
@@ -48,14 +47,77 @@ export default function DeepWideModel({
     return '/openai.jpg'
   }
 
-  const makeBlocks = (v: number) => {
-    const filled = Math.round(v * BAR_LEN)
-    const empty = Math.max(0, BAR_LEN - filled)
-    return `${'█'.repeat(filled)}${'░'.repeat(empty)}`
-  }
-
   const selectedModelLabel = AVAILABLE_MODELS.find(m => m.value === researchParams.model)?.label || 'Select Model'
   const selectedLogo = getProviderLogoPath(researchParams.model)
+
+  const handleInteract = (e: React.MouseEvent, type: 'deep' | 'wide') => {
+    const ref = type === 'deep' ? deepBlocksRef : wideBlocksRef
+    if (!ref.current) return
+    
+    const rect = ref.current.getBoundingClientRect()
+    let x = e.clientX - rect.left
+    x = Math.max(0, Math.min(rect.width, x))
+    
+    // 4 steps
+    const step = Math.ceil((x / rect.width) * STEPS)
+    const newValue = step / STEPS
+    
+    // Prevent 0 if desired, though logic above gives 1..4 if x>0. If x=0 (very left edge), step=0. 
+    // Let's ensure at least 1 step is selected if that's the desired behavior, or allow 0. 
+    // Usually Deep/Wide starts at 1/4? Let's stick to the ceiling logic which biases to 1..4 unless exactly 0.
+    // Actually, let's just clamp to min 0.25 if needed, but let's respect user input.
+    
+    const finalValue = Math.max(0.25, newValue) // Ensure at least one block if clicked
+
+    if (type === 'deep') {
+        if (finalValue !== researchParams.deep) {
+             onResearchParamsChange({ ...researchParams, deep: finalValue })
+        }
+    } else {
+        if (finalValue !== researchParams.wide) {
+             onResearchParamsChange({ ...researchParams, wide: finalValue })
+        }
+    }
+  }
+
+  // New function to handle drag (mouse move while pressed)
+  const handleMouseMove = (e: React.MouseEvent, type: 'deep' | 'wide') => {
+      if (e.buttons === 1) {
+          handleInteract(e, type)
+      }
+  }
+
+  const renderGrid = (value: number, activeColor: string) => {
+    const activeCount = Math.round(value * STEPS)
+    return (
+        <div style={{ 
+            display: 'flex', 
+            gap: '0', 
+            border: '1px solid #555', 
+            borderRadius: '2px',
+            overflow: 'hidden',
+            height: '14px'
+        }}>
+            {Array.from({ length: STEPS }).map((_, i) => {
+                const isActive = i < activeCount
+                const isLast = i === STEPS - 1
+                return (
+                    <div 
+                        key={i} 
+                        style={{
+                            width: '12px',
+                            height: '100%',
+                            backgroundColor: isActive ? activeColor : 'transparent',
+                            borderRight: isLast ? 'none' : `1px solid ${isActive ? activeColor : '#555'}`,
+                            transition: 'all 0.15s ease',
+                            boxSizing: 'border-box'
+                        }}
+                    />
+                )
+            })}
+        </div>
+    )
+  }
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -173,11 +235,9 @@ export default function DeepWideModel({
       style={{
         fontSize: '12px',
         color: isDeepWideHover ? '#e5e5e5' : '#888',
-        fontFamily:
-          'inherit, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
+        fontFamily: 'inherit',
         lineHeight: '1.25',
         whiteSpace: 'pre',
-        cursor: 'ew-resize',
         userSelect: 'none',
         transition: 'color 150ms ease, background 150ms ease',
         padding: '2px 8px',
@@ -186,49 +246,34 @@ export default function DeepWideModel({
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'flex-start',
-        gap: '2px'
+        gap: '4px'
       }}
     >
       {/* DEEP Row */}
       <div
-        onClick={(e) => {
-          const targetSpan = deepBlocksRef.current
-          if (!targetSpan) return
-          const barRect = targetSpan.getBoundingClientRect()
-          let xWithin = e.clientX - barRect.left
-          xWithin = Math.max(0, Math.min(barRect.width - 1, xWithin))
-          const bucketPx = barRect.width / STEPS
-          const stepIndex = Math.floor(xWithin / bucketPx)
-          const next = (stepIndex + 1) / STEPS
-          onResearchParamsChange({ deep: next, wide: researchParams.wide, model: researchParams.model })
-        }}
+        onMouseDown={(e) => handleInteract(e, 'deep')}
+        onMouseMove={(e) => handleMouseMove(e, 'deep')}
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: '2px',
+          gap: '8px',
           padding: 0,
           borderRadius: '6px',
-          cursor: 'inherit'
+          cursor: 'pointer'
         }}
       >
         <span style={{ fontFamily: 'inherit', fontWeight: 400, width: '36px' }}>Deep</span>
-        <span style={{ margin: '0 2px' }} />
-        <span
-          ref={deepBlocksRef}
-          style={{
-            fontFamily:
-              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
-          }}
-        >
-          {makeBlocks(researchParams.deep)}
-        </span>
+        <div ref={deepBlocksRef}>
+             {renderGrid(researchParams.deep, '#39BC66')}
+        </div>
         <span
           style={{
             fontFamily: 'inherit',
             display: 'inline-block',
             width: '4ch',
             textAlign: 'right',
-            marginLeft: '8px'
+            color: '#666',
+            fontSize: '11px'
           }}
         >
           {Math.round(researchParams.deep * 100)}%
@@ -237,45 +282,30 @@ export default function DeepWideModel({
 
       {/* WIDE Row */}
       <div
+        onMouseDown={(e) => handleInteract(e, 'wide')}
+        onMouseMove={(e) => handleMouseMove(e, 'wide')}
         style={{
           marginTop: 0,
           display: 'flex',
           alignItems: 'center',
-          gap: '2px',
+          gap: '8px',
           padding: 0,
           borderRadius: '6px',
-          cursor: 'inherit'
-        }}
-        onClick={(e) => {
-          const targetSpan = wideBlocksRef.current
-          if (!targetSpan) return
-          const barRect = targetSpan.getBoundingClientRect()
-          let xWithin = e.clientX - barRect.left
-          xWithin = Math.max(0, Math.min(barRect.width - 1, xWithin))
-          const bucketPx = barRect.width / STEPS
-          const stepIndex = Math.floor(xWithin / bucketPx)
-          const next = (stepIndex + 1) / STEPS
-          onResearchParamsChange({ deep: researchParams.deep, wide: next, model: researchParams.model })
+          cursor: 'pointer'
         }}
       >
         <span style={{ fontFamily: 'inherit', fontWeight: 400, width: '36px' }}>Wide</span>
-        <span style={{ margin: '0 2px' }} />
-        <span
-          ref={wideBlocksRef}
-          style={{
-            fontFamily:
-              'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
-          }}
-        >
-          {makeBlocks(researchParams.wide)}
-        </span>
+        <div ref={wideBlocksRef}>
+            {renderGrid(researchParams.wide, '#39BC66')}
+        </div>
         <span
           style={{
             fontFamily: 'inherit',
             display: 'inline-block',
             width: '4ch',
             textAlign: 'right',
-            marginLeft: '8px'
+            color: '#666',
+            fontSize: '11px'
           }}
         >
           {Math.round(researchParams.wide * 100)}%
@@ -285,4 +315,3 @@ export default function DeepWideModel({
     </div>
   )
 }
-
