@@ -93,22 +93,29 @@ export default function DeepWideModel({
         <div style={{ 
             display: 'flex', 
             gap: '0', 
-            border: '1px solid #555', 
-            borderRadius: '2px',
-            overflow: 'hidden',
             height: '14px'
         }}>
             {Array.from({ length: STEPS }).map((_, i) => {
                 const isActive = i < activeCount
+                const isFirst = i === 0
                 const isLast = i === STEPS - 1
+                const borderColor = isActive ? activeColor : '#555'
+
                 return (
                     <div 
                         key={i} 
                         style={{
-                            width: '12px',
+                            width: '20px',
                             height: '100%',
                             backgroundColor: isActive ? activeColor : 'transparent',
-                            borderRight: isLast ? 'none' : `1px solid ${isActive ? activeColor : '#555'}`,
+                            borderTop: `1px solid ${borderColor}`,
+                            borderBottom: `1px solid ${borderColor}`,
+                            borderLeft: isFirst ? `1px solid ${borderColor}` : 'none',
+                            borderRight: `1px solid ${borderColor}`,
+                            borderTopLeftRadius: 0,
+                            borderBottomLeftRadius: 0,
+                            borderTopRightRadius: 0,
+                            borderBottomRightRadius: 0,
                             transition: 'all 0.15s ease',
                             boxSizing: 'border-box'
                         }}
@@ -259,12 +266,12 @@ export default function DeepWideModel({
           gap: '8px',
           padding: 0,
           borderRadius: '6px',
-          cursor: 'pointer'
+          cursor: 'ew-resize'
         }}
       >
         <span style={{ fontFamily: 'inherit', fontWeight: 400, width: '36px' }}>Deep</span>
         <div ref={deepBlocksRef}>
-             {renderGrid(researchParams.deep, '#39BC66')}
+             {renderGrid(researchParams.deep, '#a3a3a3')}
         </div>
         <span
           style={{
@@ -291,12 +298,12 @@ export default function DeepWideModel({
           gap: '8px',
           padding: 0,
           borderRadius: '6px',
-          cursor: 'pointer'
+          cursor: 'ew-resize'
         }}
       >
         <span style={{ fontFamily: 'inherit', fontWeight: 400, width: '36px' }}>Wide</span>
         <div ref={wideBlocksRef}>
-            {renderGrid(researchParams.wide, '#39BC66')}
+            {renderGrid(researchParams.wide, '#a3a3a3')}
         </div>
         <span
           style={{
