@@ -91,7 +91,7 @@ export default function DeepWideModel({
     const activeCount = Math.round(value * STEPS)
     return (
         <div style={{ 
-            display: 'flex', 
+            display: 'flex',
             gap: '0', 
             height: '14px'
         }}>
