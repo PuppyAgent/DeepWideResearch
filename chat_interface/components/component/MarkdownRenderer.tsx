@@ -1,5 +1,5 @@
 import { CSSProperties, memo, useMemo, useRef } from 'react'
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown, { Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkBreaks from 'remark-breaks'
 
@@ -43,25 +43,25 @@ function MarkdownRenderer({
   stylesRef.current = componentsStyle || DEFAULT_STYLES
 
   // Memoize components once. They will read from refs to get latest data.
-  const components = useMemo(() => {
+  const components: Components = useMemo(() => {
     return {
-      p: ({ children, ...props }: any) => (
+      p: ({ children, node, ...props }) => (
         <p style={stylesRef.current.p ?? DEFAULT_STYLES.p} {...props}>{children}</p>
       ),
-      h1: (props: any) => <h1 style={stylesRef.current.h1 ?? DEFAULT_STYLES.h1} {...props} />,
-      h2: (props: any) => <h2 style={stylesRef.current.h2 ?? DEFAULT_STYLES.h2} {...props} />,
-      h3: (props: any) => <h3 style={stylesRef.current.h3 ?? DEFAULT_STYLES.h3} {...props} />,
-      ul: (props: any) => <ul style={stylesRef.current.ul ?? DEFAULT_STYLES.ul} {...props} />,
-      ol: (props: any) => <ol style={stylesRef.current.ol ?? DEFAULT_STYLES.ol} {...props} />,
-      li: (props: any) => <li style={stylesRef.current.li ?? DEFAULT_STYLES.li} {...props} />,
-      table: (props: any) => <table style={stylesRef.current.table ?? DEFAULT_STYLES.table} {...props} />,
-      thead: (props: any) => <thead style={stylesRef.current.thead ?? DEFAULT_STYLES.thead} {...props} />,
-      tbody: (props: any) => <tbody {...props} />,
-      tr: (props: any) => <tr style={stylesRef.current.tr ?? DEFAULT_STYLES.tr} {...props} />,
-      th: (props: any) => <th style={stylesRef.current.th ?? DEFAULT_STYLES.th} {...props} />,
-      td: (props: any) => <td style={stylesRef.current.td ?? DEFAULT_STYLES.td} {...props} />,
+      h1: ({ node, ...props }) => <h1 style={stylesRef.current.h1 ?? DEFAULT_STYLES.h1} {...props} />,
+      h2: ({ node, ...props }) => <h2 style={stylesRef.current.h2 ?? DEFAULT_STYLES.h2} {...props} />,
+      h3: ({ node, ...props }) => <h3 style={stylesRef.current.h3 ?? DEFAULT_STYLES.h3} {...props} />,
+      ul: ({ node, ...props }) => <ul style={stylesRef.current.ul ?? DEFAULT_STYLES.ul} {...props} />,
+      ol: ({ node, ...props }) => <ol style={stylesRef.current.ol ?? DEFAULT_STYLES.ol} {...props} />,
+      li: ({ node, ...props }) => <li style={stylesRef.current.li ?? DEFAULT_STYLES.li} {...props} />,
+      table: ({ node, ...props }) => <table style={stylesRef.current.table ?? DEFAULT_STYLES.table} {...props} />,
+      thead: ({ node, ...props }) => <thead style={stylesRef.current.thead ?? DEFAULT_STYLES.thead} {...props} />,
+      tbody: ({ node, ...props }) => <tbody {...props} />,
+      tr: ({ node, ...props }) => <tr style={stylesRef.current.tr ?? DEFAULT_STYLES.tr} {...props} />,
+      th: ({ node, ...props }) => <th style={stylesRef.current.th ?? DEFAULT_STYLES.th} {...props} />,
+      td: ({ node, ...props }) => <td style={stylesRef.current.td ?? DEFAULT_STYLES.td} {...props} />,
       
-      a: ({ href, children, ...props }: any) => {
+      a: ({ href, children, node, ...props }) => {
         const text = typeof children === 'string'
           ? children
           : Array.isArray(children) && children.length === 1 && typeof children[0] === 'string'
