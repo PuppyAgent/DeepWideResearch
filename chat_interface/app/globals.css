@@ -129,3 +129,23 @@ html, body {
   line-height: 1.4;
   flex: 1;
 }
+
+/* Citation reference badge */
+.citation-reference {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #4a90e2;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 600;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  margin: 0 2px;
+  vertical-align: middle;
+  line-height: 1;
+  cursor: pointer;
+  transition: none;
+  text-decoration: none;
+}
