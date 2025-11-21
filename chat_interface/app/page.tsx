@@ -12,6 +12,7 @@ import { useSession } from './context/SessionContext'
 import type { Message as UIMessage } from '../components/ChatMain'
 import { useUiMessages } from './hooks/useUiMessages'
 import { useAccountData } from './context/AccountDataContext'
+import { useStreamingChat } from './hooks/useStreamingChat'
  
 
 // Dynamically import ChatPanel (composes settings buttons and ChatInterface)
@@ -20,24 +21,30 @@ const ChatPanel = dynamic(
   { ssr: false }
 )
 
-// Standard message format - follows OpenAI format
-interface ChatMessage {
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  timestamp?: number
-  actionList?: string[]
-  sources?: { service: string; query: string; url: string }[]
-}
-
 export default function Home() {
-  const { getAccessToken, session, isAuthReady } = useAuth()
+  const { getAccessToken, session, isAuthReady, supabase } = useAuth()
   const router = useRouter()
 
   useEffect(() => {
-    if (isAuthReady && !session) {
-      router.replace('/login')
+    if (!isAuthReady || session || !supabase) return
+    let cancelled = false
+    const confirmSession = async () => {
+      try {
+        const { data } = await supabase.auth.getSession()
+        if (!cancelled && !data.session) {
+          router.replace('/login')
+        }
+      } catch (error) {
+        if (!cancelled) {
+          router.replace('/login')
+        }
+      }
     }
-  }, [isAuthReady, session, router])
+    void confirmSession()
+    return () => {
+      cancelled = true
+    }
+  }, [isAuthReady, session, supabase, router])
   // 🎯 Use SessionContext (contains session list, message history, etc.)
   const {
     sessions,
@@ -133,6 +140,12 @@ export default function Home() {
     ]
   })
 
+  const { send } = useStreamingChat({
+    researchParams,
+    mcpConfig,
+    getAccessToken
+  })
+
 
   // Balance now comes from AccountDataContext (single source of truth). No local fetching here.
 
@@ -141,35 +154,6 @@ export default function Home() {
     console.log('📊 Current research params:', researchParams)
   }, [researchParams])
 
-  // Add debug info - show current MCP configuration state
-  React.useEffect(() => {
-    const enabledServices = mcpConfig.services
-      .filter(service => service.enabled)
-      .map(service => service.name)
-
-    const mcpForBackend = mcpConfig.services.reduce((acc, service) => {
-      if (service.enabled) {
-        const enabledTools = service.tools
-          .filter(tool => tool.enabled)
-          .map(tool => tool.name)
-        
-        if (enabledTools.length > 0) {
-          acc[service.name.toLowerCase()] = enabledTools
-        }
-      }
-      return acc
-    }, {} as Record<string, string[]>)
-    
-    console.log('🔧 Current MCP config:', {
-      allServices: mcpConfig.services.map(s => ({ 
-        name: s.name, 
-        enabled: s.enabled,
-        tools: s.tools.map(t => ({ name: t.name, enabled: t.enabled }))
-      })),
-      enabledServices: enabledServices,
-      backendFormat: mcpForBackend
-    })
-  }, [mcpConfig])
 
   // Sidebar dropdown (overlay) close on outside click
   useEffect(() => {
@@ -238,214 +222,7 @@ export default function Home() {
     }
   }
 
-  const handleSendMessage = async (message: string, onStreamUpdate?: (content: string, isStreaming?: boolean, statusHistory?: string[]) => void) => {
-    // 🔒 Key: Lock the current sessionId at the start of the function, prevent state confusion from session switching
-    let targetSessionId = currentSessionId
-    
-    // 📝 Before promoting temporary session, save temporary session messages first
-    let messagesBeforePromotion: ChatMessage[] = []
-    if (tempSessionId && currentSessionId === tempSessionId) {
-      messagesBeforePromotion = chatHistory[tempSessionId] || []
-    }
-    
-    // If current session is temporary, promote it to permanent first
-    if (tempSessionId && currentSessionId === tempSessionId) {
-      console.log('⬆️ Promoting temp session before sending message')
-      const firstUserMessage = message.slice(0, 60) // Use first 60 characters of first message as title
-      targetSessionId = await promoteTempSession(firstUserMessage)
-    } else if (!targetSessionId) {
-      // If no session exists, create a new permanent session
-      const firstUserMessage = message.slice(0, 60)
-      targetSessionId = await createSession(firstUserMessage)
-      await switchSession(targetSessionId)
-    }
-    
-    const userMessage: ChatMessage = { role: 'user', content: message, timestamp: Date.now() }
-    
-    // 📝 If just promoted temporary session, use saved messages before promotion; otherwise get from chatHistory
-    const currentMessages = messagesBeforePromotion.length > 0 
-      ? messagesBeforePromotion 
-      : (chatHistory[targetSessionId] || [])
-    const localHistoryBefore = [...currentMessages, userMessage]
-    
-    try {
-      // ✅ Immediately add user message to Context (UI updates immediately)
-      addMessage(targetSessionId, userMessage)
-
-      // Prepare assistant placeholder to update in-place during streaming
-      const assistantTimestamp = Date.now()
-      let assistantMessage: ChatMessage = { role: 'assistant', content: '', timestamp: assistantTimestamp, actionList: [] }
-      // Show assistant placeholder immediately in UI
-      addMessage(targetSessionId!, assistantMessage)
-      let workingHistory: ChatMessage[] = [...localHistoryBefore, assistantMessage]
-
-      // Construct request data (strip UI-only fields like actionList before sending)
-      const sanitizedHistory = localHistoryBefore.map((m) => ({
-        role: m.role,
-        content: m.content,
-        timestamp: m.timestamp
-      }))
-      
-      const requestData = {
-        message: {
-          query: message,
-          deepwide: {
-            deep: researchParams.deep,
-            wide: researchParams.wide,
-            model: researchParams.model
-          },
-            mcp: mcpConfig.services.reduce((acc, service) => {
-              // Only include enabled services and their tools
-              if (service.enabled) {
-                const enabledTools = service.tools
-                  .filter(tool => tool.enabled)
-                  .map(tool => tool.name)
-                
-                if (enabledTools.length > 0) {
-                  // Convert to backend expected format: {service_name_lowercase: [enabled_tools_list]}
-                  acc[service.name.toLowerCase()] = enabledTools
-                }
-              }
-              return acc
-            }, {} as Record<string, string[]>)
-        },
-        history: sanitizedHistory  // Send conversation history without UI-only fields
-      }
-
-      console.log('🚀 Sending streaming request to backend:', message)
-
-      // Call streaming API - use environment variable or default local address
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const token = await getAccessToken()
-      const response = await fetch(`${apiUrl}/api/research`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'text/event-stream',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify(requestData),
-        cache: 'no-store'
-      })
-
-      if (!response.ok) {
-        throw new Error(`API request failed: ${response.statusText}`)
-      }
-
-      const reader = response.body?.getReader()
-      if (!reader) {
-        throw new Error('No response body reader available')
-      }
-
-      const statusHistory: string[] = [] // 📜 累积所有状态步骤
-      let finalReport = ''
-      let isGeneratingReport = false
-
-      // Read streaming response (buffer-safe)
-      const decoder = new TextDecoder()
-      let pending = ''
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        pending += decoder.decode(value, { stream: true })
-        const lines = pending.split('\n')
-        // keep the last partial line in pending
-        pending = lines.pop() || ''
-        
-        for (const rawLine of lines) {
-          const line = rawLine.trimEnd()
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6))
-              
-              if (data.action === 'complete' && data.final_report) {
-                finalReport = data.final_report
-                onStreamUpdate?.(finalReport, false, statusHistory) // 传递完整历史
-                isGeneratingReport = false
-                // Update assistant message with final content and full actionList
-                assistantMessage = { ...assistantMessage, content: finalReport, actionList: statusHistory.length > 0 ? [...statusHistory] : undefined }
-                workingHistory = [...localHistoryBefore, assistantMessage]
-                updateMessages(targetSessionId!, workingHistory)
-              } else if (data.action === 'report_chunk') {
-                // Streaming report content
-                finalReport = data.accumulated_report
-                if (!isGeneratingReport) {
-                  isGeneratingReport = true
-                }
-                onStreamUpdate?.(finalReport, true, statusHistory) // Stream the accumulated report
-                // Update assistant content and (if any) actionList
-                assistantMessage = { ...assistantMessage, content: finalReport, actionList: statusHistory.length > 0 ? [...statusHistory] : assistantMessage.actionList }
-                workingHistory = [...localHistoryBefore, assistantMessage]
-                updateMessages(targetSessionId!, workingHistory)
-              } else if (data.action === 'sources_update' && Array.isArray(data.sources)) {
-                // Update assistant message with latest minimal sources and sync UI
-                assistantMessage = { ...assistantMessage, sources: data.sources }
-                workingHistory = [...localHistoryBefore, assistantMessage]
-                updateMessages(targetSessionId!, workingHistory)
-              } else if (data.message) {
-                statusHistory.push(data.message) // 👈 追加到历史，不覆盖
-                // Only update streaming status if not currently generating report
-                if (!isGeneratingReport) {
-                  onStreamUpdate?.(data.message, true, statusHistory) // 传递当前消息和完整历史
-                }
-                // Reflect latest step into assistant actionList only; content should only show backend report chunks
-                assistantMessage = { ...assistantMessage, actionList: [...statusHistory] }
-                workingHistory = [...localHistoryBefore, assistantMessage]
-                updateMessages(targetSessionId!, workingHistory)
-              }
-            } catch (e) {
-              console.warn('Failed to parse SSE data:', line)
-            }
-          }
-        }
-      }
-
-      // 📜 Cache the streaming history for this session
-      if (statusHistory.length > 0) {
-        setSessionStreamingCache(prev => ({
-          ...prev,
-          [targetSessionId]: statusHistory
-        }))
-        console.log('📜 Cached streaming history for session:', targetSessionId, 'steps:', statusHistory.length)
-      }
-      
-      // ✅ Save to backend
-      const completeHistory = workingHistory
-      await saveSessionToBackend(targetSessionId, completeHistory)
-      
-      // 🔑 If promoted from temporary session, now safe to update chatComponentKey
-      if (messagesBeforePromotion.length > 0 && targetSessionId !== chatComponentKey) {
-        console.log('🔑 Updating chatComponentKey after successful message, from', chatComponentKey, 'to', targetSessionId)
-        setChatComponentKey(targetSessionId)
-      }
-      
-      return finalReport || statusHistory[statusHistory.length - 1] || ''
-      
-    } catch (error) {
-      console.error('Error calling research API:', error)
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
-      const errorMessage = `❌ Error: ${error instanceof Error ? error.message : `Failed to connect to research API. Please make sure the backend server is running at ${apiUrl}`}`
-      
-      // ✅ Add error message to Context
-      const errorAssistantMessage: ChatMessage = { role: 'assistant', content: errorMessage, timestamp: Date.now() }
-      addMessage(targetSessionId, errorAssistantMessage)
-      
-      // ✅ Save to backend
-      const completeHistoryWithError = [...localHistoryBefore, errorAssistantMessage]
-      await saveSessionToBackend(targetSessionId, completeHistoryWithError).catch(e => 
-        console.warn('Failed to save error message:', e)
-      )
-      
-      // 🔑 If promoted from temporary session, now safe to update chatComponentKey
-      if (messagesBeforePromotion.length > 0 && targetSessionId !== chatComponentKey) {
-        console.log('🔑 Updating chatComponentKey after error message, from', chatComponentKey, 'to', targetSessionId)
-        setChatComponentKey(targetSessionId)
-      }
-      
-      return errorMessage
-    }
-  }
+  // useStreamingChat 提供的 send 函数承担完整发送/流式逻辑
 
   // Gate rendering to avoid flicker: wait for auth to resolve
   if (!isAuthReady) {
@@ -558,7 +335,7 @@ export default function Home() {
                 <ChatPanel
                   key={chatComponentKey}
                   initialMessages={uiMessages.length > 0 ? uiMessages : undefined}
-                  onSendMessage={handleSendMessage}
+                  onSendMessage={send}
                   placeholder="Ask anything about your research topic..."
                   researchParams={researchParams}
                   onResearchParamsChange={setResearchParams}
