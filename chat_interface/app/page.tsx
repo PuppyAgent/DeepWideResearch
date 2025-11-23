@@ -65,8 +65,8 @@ export default function Home() {
 
   // UI state
   const [researchParams, setResearchParams] = useState<{ deep: number; wide: number; model?: string }>({ 
-    deep: 1.0, 
-    wide: 1.0,
+    deep: 0.75, 
+    wide: 0.75,
     model: 'google/gemini-3-pro-preview' // Default model
   })
   const [sidebarWidth, setSidebarWidth] = useState(240)
@@ -118,8 +118,16 @@ export default function Home() {
         setIsDevModeOpen(false)
       }
     }
+    
+    // Listen for custom event to open Dev Mode
+    const handleOpenDevMode = () => setIsDevModeOpen(true)
+    window.addEventListener('open-dev-mode', handleOpenDevMode)
     document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    
+    return () => {
+      window.removeEventListener('open-dev-mode', handleOpenDevMode)
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
   }, [isDevModeOpen])
   const [mcpConfig, setMcpConfig] = useState({
     services: [
