@@ -16,7 +16,7 @@ export default function Home() {
   const router = useRouter()
 
   useEffect(() => {
-    if (isAuthReady && session) router.push('/app')
+    if (isAuthReady && session) router.push('/chat')
   }, [isAuthReady, session, router])
 
   return (
