@@ -30,6 +30,18 @@ export default function MCPButton({ service, onServiceChange }: MCPButtonProps) 
   const [testMessage, setTestMessage] = useState('')
   const [availableTools, setAvailableTools] = useState<string[]>([])
   const [connectionStatus, setConnectionStatus] = useState<'unknown' | 'connected' | 'disconnected'>('unknown')
+  const [isHover, setIsHover] = useState(false)
+
+  const handleRemoveClick = (e: React.MouseEvent | React.KeyboardEvent) => {
+    e.stopPropagation()
+    const newService = {
+      ...service,
+      enabled: false,
+      tools: service.tools.map(t => ({ ...t, enabled: false }))
+    }
+    onServiceChange(newService)
+    setIsOpen(false)
+  }
 
   // Close panel on outside click
   React.useEffect(() => {
@@ -395,9 +407,9 @@ export default function MCPButton({ service, onServiceChange }: MCPButtonProps) 
         data-mcp-button={service.name}
         style={{
           position: 'relative',
-          width: '36px',
-          height: '36px',
-          borderRadius: '18px',
+          height: '32px',
+          padding: '0 12px',
+          borderRadius: '0px',
           border: isOpen
             ? '2px solid #5a5a5a'
             : '1px solid #3a3a3a',
@@ -408,50 +420,105 @@ export default function MCPButton({ service, onServiceChange }: MCPButtonProps) 
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          gap: '8px',
           cursor: 'pointer',
           boxShadow: isOpen
             ? '0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.1)' 
             : '0 2px 8px rgba(0,0,0,0.3)',
-          transition: 'all 200ms ease',
-          transform: isOpen ? 'scale(1.05)' : 'scale(1)',
+          transition: 'border-color 150ms ease, color 150ms ease, background-color 150ms ease, box-shadow 150ms ease',
           backdropFilter: 'blur(8px)',
-          padding: 0,
           margin: 0,
           zIndex: 11
         }}
         onMouseEnter={(e) => {
+          setIsHover(true)
           if (!isOpen) {
             e.currentTarget.style.borderColor = '#5a5a5a'
             e.currentTarget.style.color = '#e6e6e6'
-            e.currentTarget.style.transform = 'scale(1.08)'
           }
         }}
         onMouseLeave={(e) => {
+          setIsHover(false)
           if (!isOpen) {
             e.currentTarget.style.borderColor = '#3a3a3a'
             e.currentTarget.style.color = '#bbb'
-            e.currentTarget.style.transform = 'scale(1)'
-          } else {
-            e.currentTarget.style.transform = 'scale(1.05)'
           }
         }}
       >
-        <img 
-          src={service.name === 'Tavily' ? '/tavilylogo.png' : '/exalogo.png'}
-          alt={`${service.name} logo`}
+        <div
           style={{
             width: '14px',
             height: '14px',
-            borderRadius: '2px',
-            objectFit: 'contain'
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
           }}
-        />
+        >
+          {isHover ? (
+            <span
+              onClick={handleRemoveClick}
+              onMouseDown={(e) => { e.stopPropagation() }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  handleRemoveClick(e)
+                }
+              }}
+              title={`Remove ${service.name}`}
+              aria-label={`Remove ${service.name}`}
+              role="button"
+              tabIndex={0}
+              style={{
+                width: '14px',
+                height: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: 0,
+                margin: 0,
+                cursor: 'pointer',
+                color: 'inherit'
+              }}
+            >
+              <svg 
+                viewBox="0 0 24 24" 
+                width="14" 
+                height="14" 
+                fill="none" 
+                stroke="currentColor" 
+                strokeWidth="2" 
+                strokeLinecap="round"
+              >
+                <path d="M6 6L18 18M6 18L18 6" />
+              </svg>
+            </span>
+          ) : (
+            <img 
+              src={service.name === 'Tavily' ? '/tavilylogo.png' : '/exalogo.png'}
+              alt={`${service.name} logo`}
+              style={{
+                width: '14px',
+                height: '14px',
+                borderRadius: '0px',
+                objectFit: 'contain'
+              }}
+            />
+          )}
+        </div>
+        <span
+          style={{
+            fontSize: '12px',
+            color: isOpen ? '#e6e6e6' : '#888'
+          }}
+        >
+          {service.name}
+        </span>
         {/* Minimal corner status dot */}
         {connectionStatus === 'connected' && (
           <div style={{
             position: 'absolute',
-            top: '1px',
-            right: '1px',
+            top: '-3.5px',
+            right: '-3.5px',
             width: '7px',
             height: '7px',
             borderRadius: '50%',
@@ -462,8 +529,8 @@ export default function MCPButton({ service, onServiceChange }: MCPButtonProps) 
         {connectionStatus === 'disconnected' && (
           <div style={{
             position: 'absolute',
-            top: '1px',
-            right: '1px',
+            top: '-3.5px',
+            right: '-3.5px',
             width: '7px',
             height: '7px',
             borderRadius: '50%',

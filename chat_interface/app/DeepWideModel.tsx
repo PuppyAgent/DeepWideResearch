@@ -1,7 +1,8 @@
 'use client'
 
-import React, { useState, useRef } from 'react'
+import React, { useState, useRef, useLayoutEffect } from 'react'
 import { useAccountData } from './context/AccountDataContext'
+import { createPortal } from 'react-dom'
 
 import { Lock } from 'lucide-react'
 
@@ -31,6 +32,7 @@ export default function DeepWideModel({
   const [isDeepWideHover, setIsDeepWideHover] = useState(false)
   const [isModelHover, setIsModelHover] = useState(false)
   const [showModelMenu, setShowModelMenu] = useState(false)
+  const [menuPosition, setMenuPosition] = useState<{ top: number; left: number } | null>(null)
   const [upsellVisible, setUpsellVisible] = useState(false)
   const [isClosing, setIsClosing] = useState(false)
   const [upsellType, setUpsellType] = useState<'deep' | 'wide' | null>(null)
@@ -38,20 +40,48 @@ export default function DeepWideModel({
   const deepBlocksRef = useRef<HTMLDivElement>(null)
   const wideBlocksRef = useRef<HTMLDivElement>(null)
   const modelMenuRef = useRef<HTMLDivElement>(null)
+  const portalMenuRef = useRef<HTMLDivElement>(null)
   const upsellTimer = useRef<NodeJS.Timeout | null>(null)
   const closeTimer = useRef<NodeJS.Timeout | null>(null)
 
-  // Close model menu on outside click
+  // Close model menu on outside click (supports portal menu)
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (modelMenuRef.current && !modelMenuRef.current.contains(event.target as Node)) {
-        setShowModelMenu(false)
-        setIsModelHover(false)
-      }
+      const target = event.target as Node
+      const insideTrigger = !!modelMenuRef.current && modelMenuRef.current.contains(target)
+      const insidePortalMenu = !!portalMenuRef.current && portalMenuRef.current.contains(target)
+      if (insideTrigger || insidePortalMenu) return
+      setShowModelMenu(false)
+      setIsModelHover(false)
     }
     document.addEventListener('mousedown', handleClickOutside)
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
+
+  // Position the dropdown in a portal (avoid clipping by overflow/stacking contexts)
+  useLayoutEffect(() => {
+    if (!showModelMenu) return
+    const updatePosition = () => {
+      if (!modelMenuRef.current) return
+      const rect = modelMenuRef.current.getBoundingClientRect()
+      let top = menuDirection === 'up' ? rect.top : rect.bottom
+      // Add small offset
+      top += menuDirection === 'up' ? -4 : 4
+      setMenuPosition({ top, left: rect.left })
+      // If menuDirection is up, adjust by menu height after first render
+      if (menuDirection === 'up' && portalMenuRef.current) {
+        const h = portalMenuRef.current.getBoundingClientRect().height
+        setMenuPosition({ top: rect.top - h - 4, left: rect.left })
+      }
+    }
+    updatePosition()
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+    }
+  }, [showModelMenu, menuDirection])
 
   const triggerUpsell = (type: 'deep' | 'wide') => {
     setSnapBackType(type)
@@ -227,25 +257,25 @@ export default function DeepWideModel({
           </svg>
         </button>
 
-        {showModelMenu && (
-          <div style={{
-            position: 'absolute',
-            ...(menuDirection === 'up' 
-              ? { bottom: '100%', marginBottom: '4px' } 
-              : { top: '100%', marginTop: '4px' }
-            ),
-            left: 0,
-            background: '#1a1a1a',
-            border: '1px solid #333',
-            borderRadius: '8px',
-            padding: '4px',
-            width: '140px',
-            zIndex: 100,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: '2px'
-          }}>
+        {showModelMenu && menuPosition && createPortal(
+          <div
+            ref={portalMenuRef}
+            style={{
+              position: 'fixed',
+              top: `${menuPosition.top}px`,
+              left: `${menuPosition.left}px`,
+              background: '#1a1a1a',
+              border: '1px solid #333',
+              borderRadius: '8px',
+              padding: '4px',
+              width: '180px',
+              zIndex: 10000,
+              boxShadow: '0 8px 24px rgba(0,0,0,0.45)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '2px'
+            }}
+          >
             {AVAILABLE_MODELS.map((model) => (
               <div
                 key={model.value}
@@ -255,7 +285,7 @@ export default function DeepWideModel({
                   setIsModelHover(false)
                 }}
                 style={{
-                  padding: '6px 8px',
+                  padding: '8px 10px',
                   fontSize: '12px',
                   color: researchParams.model === model.value ? '#fff' : '#aaa',
                   background: researchParams.model === model.value ? '#4a90e2' : 'transparent',
@@ -287,7 +317,8 @@ export default function DeepWideModel({
                 {model.label}
               </div>
             ))}
-          </div>
+          </div>,
+          document.body
         )}
       </div>
 

@@ -288,7 +288,6 @@ function AddMCPButton({ removedServices, onRestoreService, onAddSourceClick }: A
             if (!isOpen) {
               e.currentTarget.style.borderColor = '#5a5a5a'
               e.currentTarget.style.color = '#e6e6e6'
-              e.currentTarget.style.transform = 'scale(1.08)'
             }
           }}
           onMouseLeave={(e) => {
@@ -296,7 +295,6 @@ function AddMCPButton({ removedServices, onRestoreService, onAddSourceClick }: A
             if (!isOpen) {
               e.currentTarget.style.borderColor = '#5a5a5a'
               e.currentTarget.style.color = '#666'
-              e.currentTarget.style.transform = 'scale(1)'
             }
           }}
           title="Add source"
@@ -304,9 +302,9 @@ function AddMCPButton({ removedServices, onRestoreService, onAddSourceClick }: A
         data-add-mcp-button
         style={{
           position: 'relative',
-          height: '36px',
-            padding: '0 12px',
-          borderRadius: '18px',
+          height: '32px',
+          padding: '0 12px',
+          borderRadius: '0px',
           border: isOpen ? '2px solid #5a5a5a' : '1px dashed #5a5a5a',
           background: isOpen 
             ? 'linear-gradient(135deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.08) 100%)'
@@ -315,16 +313,15 @@ function AddMCPButton({ removedServices, onRestoreService, onAddSourceClick }: A
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-            gap: '6px',
+          gap: '6px',
           cursor: 'pointer',
           boxShadow: isOpen
             ? '0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.1)'
             : '0 2px 8px rgba(0,0,0,0.2)',
-          transition: 'all 200ms ease',
-          transform: isOpen ? 'scale(1.05)' : 'scale(1)',
+          transition: 'border-color 150ms ease, color 150ms ease, background-color 150ms ease, box-shadow 150ms ease',
           backdropFilter: 'blur(8px)',
           margin: 0,
-            opacity: isOpen ? 1 : (isAddHover ? 0.9 : 0.7)
+          opacity: isOpen ? 1 : (isAddHover ? 0.9 : 0.7)
         }}
       >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
