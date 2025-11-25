@@ -47,10 +47,10 @@ export default function LandingChatInterface({ onStartResearch }: LandingChatInt
   
   // State for demo "busy"
   const [isBusy, setIsBusy] = React.useState(false)
-  const [visibleMcps, setVisibleMcps] = React.useState<{ name: string; logo: string }[]>([
+  const visibleMcps = [
     { name: 'Tavily', logo: '/tavilylogo.png' },
     { name: 'Exa', logo: '/exalogo.png' },
-  ])
+  ]
 
   const handleSend = async () => {
     if (!inputValue.trim() || isBusy) return
@@ -128,25 +128,9 @@ export default function LandingChatInterface({ onStartResearch }: LandingChatInt
           <div className="w-full max-w-[720px] mx-auto flex items-center justify-start gap-2 px-4 md:px-8 pb-1 select-none">
             <div className="flex items-center gap-2">
               {visibleMcps.map((svc) => (
-                <div key={svc.name} className="relative group flex items-center gap-2 border border-white/15 bg-white/[0.03] px-3 py-1.5 cursor-default">
+                <div key={svc.name} className="relative flex items-center gap-2 border border-white/15 bg-white/[0.03] px-3 py-1.5 cursor-default">
                   <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#2CAC58] shadow-[0_0_0_2px_rgba(10,10,10,1)]" aria-hidden />
-                  <div className="w-[14px] h-[14px] relative flex items-center justify-center">
-                    <Image src={svc.logo} alt={`${svc.name} logo`} width={14} height={14} className="opacity-80 group-hover:hidden" />
-                    <button
-                      type="button"
-                      aria-label={`Remove ${svc.name}`}
-                      className="hidden group-hover:flex items-center justify-center w-3.5 h-3.5 text-foreground/70"
-                      onClick={(e) => {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        setVisibleMcps(prev => prev.filter(s => s.name !== svc.name))
-                      }}
-                    >
-                      <svg viewBox="0 0 24 24" className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                        <path d="M6 6L18 18M6 18L18 6" />
-                      </svg>
-                    </button>
-                  </div>
+                  <Image src={svc.logo} alt={`${svc.name} logo`} width={14} height={14} className="opacity-80" />
                   <span className="text-xs text-[#888888]">{svc.name}</span>
                 </div>
               ))}

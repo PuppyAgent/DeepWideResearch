@@ -104,8 +104,8 @@ export default function OpenSourcePage() {
                   rel="noopener noreferrer"
                   className="flex items-center gap-4 p-4 border border-white/10 hover:border-white/30 hover:bg-white/[0.02] transition-all group"
                 >
-                  <div className="w-10 h-10 flex items-center justify-center border border-white/10 text-[16px]">
-                    🐶
+                  <div className="w-10 h-10 flex items-center justify-center border border-white/10">
+                    <Image src="/puppychatlogo.png" alt="PuppyChat logo" width={24} height={24} className="object-contain" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-[13px] font-medium text-foreground/80 group-hover:text-foreground transition-colors">PuppyChat</div>

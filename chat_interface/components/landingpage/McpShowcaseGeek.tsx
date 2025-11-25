@@ -7,19 +7,19 @@ export default function McpShowcaseGeek() {
     { 
       name: "Exa", 
       logoSrc: "/exalogo.png",
-      description: "Neural search engine",
+      description: "Web search",
       status: "active"
     },
     { 
       name: "Tavily", 
       logoSrc: "/tavilylogo.png",
-      description: "Research API",
+      description: "Web search",
       status: "active"
     },
     { 
       name: "Context 7", 
-      logoSrc: "/moreMcpLogo/elasticsearch.svg",
-      description: "Context management",
+      logoSrc: "/context7.svg",
+      description: "Dev search",
       status: "active"
     },
   ];

@@ -22,7 +22,7 @@ export default function BotMessage({ message, actionSteps }: BotMessageProps) {
   const [isHovered, setIsHovered] = useState(false)
   const [copied, setCopied] = useState(false)
   const [isExpanded, setIsExpanded] = useState(true)
-  const [isSourcesExpanded, setIsSourcesExpanded] = useState(false)
+  const [isSourcesExpanded, setIsSourcesExpanded] = useState(true)
   const [hoveredUrl, setHoveredUrl] = useState<string | null>(null)
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 })
 
