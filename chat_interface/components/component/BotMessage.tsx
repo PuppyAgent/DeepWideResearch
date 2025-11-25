@@ -521,7 +521,7 @@ export default function BotMessage({ message, actionSteps }: BotMessageProps) {
       )}
 
       {/* Meta bar - 时间戳和复制按钮显示在消息框外面 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', marginLeft: '4px', opacity: isHovered ? 0.6 : 0, transition: 'opacity 0.2s ease', justifyContent: 'flex-start' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', marginLeft: '4px', opacity: isHovered ? 0.6 : 0, transition: 'opacity 0.2s ease', justifyContent: 'flex-start', alignSelf: 'flex-start' }}>
         <div style={{ fontSize: '14px', color: '#a0a0a0' }}>
           {message.timestamp.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
         </div>
