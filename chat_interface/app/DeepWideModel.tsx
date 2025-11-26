@@ -15,9 +15,8 @@ export interface DeepWideModelProps {
 
 const AVAILABLE_MODELS = [
   { label: 'Gemini 3 Pro', value: 'google/gemini-3-pro-preview' },
-  { label: 'GPT-5.1', value: 'openai/gpt-5.1' },
-  { label: 'GPT-4o', value: 'openai/gpt-4o' },
-  { label: 'O4 Mini', value: 'openai/o4-mini' }
+  { label: 'GPT 5.1', value: 'openai/gpt-5.1' },
+  { label: 'Claude Opus 4.5', value: 'anthropic/claude-opus-4.5' }
 ]
 
 export default function DeepWideModel({
@@ -112,9 +111,10 @@ export default function DeepWideModel({
   const STEPS = 4
 
   const getProviderLogoPath = (modelValue?: string) => {
-    if (!modelValue) return '/openai.jpg'
-    if (modelValue.startsWith('google/')) return '/genmini.jpg' // Gemini placeholder logo
-    return '/openai.jpg'
+    if (!modelValue) return '/moreMcpLogo/ChatGPT_logo.png'
+    if (modelValue.startsWith('google/')) return '/gemini.png' // Gemini logo
+    if (modelValue.startsWith('anthropic/')) return '/Claude.png' // Anthropic/Claude logo
+    return '/moreMcpLogo/ChatGPT_logo.png' // OpenAI/ChatGPT logo
   }
 
   const selectedModelLabel = AVAILABLE_MODELS.find(m => m.value === researchParams.model)?.label || 'Select Model'
@@ -288,7 +288,7 @@ export default function DeepWideModel({
                   padding: '8px 10px',
                   fontSize: '12px',
                   color: researchParams.model === model.value ? '#fff' : '#aaa',
-                  background: researchParams.model === model.value ? '#4a90e2' : 'transparent',
+                  background: researchParams.model === model.value ? 'rgba(255,255,255,0.12)' : 'transparent',
                   borderRadius: '4px',
                   cursor: 'pointer',
                   transition: 'background 150ms',
