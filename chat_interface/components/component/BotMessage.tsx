@@ -123,12 +123,12 @@ export default function BotMessage({ message, actionSteps }: BotMessageProps) {
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '6px',
+                gap: '10px',
                 cursor: 'pointer',
                 userSelect: 'none',
-                marginBottom: isExpanded ? '10px' : '0',
+                marginBottom: isExpanded ? '14px' : '0',
                 color: 'rgba(255,255,255,0.6)',
-                fontSize: '12px',
+                fontSize: '14px',
                 fontWeight: 500,
                 transition: 'color 0.2s',
                 width: 'fit-content'
@@ -136,10 +136,20 @@ export default function BotMessage({ message, actionSteps }: BotMessageProps) {
               onMouseEnter={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.9)'}
               onMouseLeave={(e) => e.currentTarget.style.color = 'rgba(255,255,255,0.6)'}
             >
-              {isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+              {/* Chevron container */}
+              <div style={{ 
+                width: '16px', 
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                flexShrink: 0,
+                marginLeft: '-4px'
+              }}>
+                {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+              </div>
               <span>Thinking Process</span>
               {!isExpanded && sources.length > 0 && (
-                <span style={{ fontSize: '11px', opacity: 0.7, marginLeft: '4px', background: 'rgba(255,255,255,0.1)', padding: '1px 6px', borderRadius: '10px' }}>
+                <span style={{ fontSize: '12px', opacity: 0.7, marginLeft: '4px', background: 'rgba(255,255,255,0.1)', padding: '1px 6px', borderRadius: '10px' }}>
                   {sources.length} sources
                 </span>
               )}
@@ -166,9 +176,10 @@ export default function BotMessage({ message, actionSteps }: BotMessageProps) {
                         key={step.id ?? `action-step-${index}`}
                         style={{
                           display: 'flex',
-                          alignItems: 'flex-start',
-                          gap: '8px',
-                          position: 'relative'
+                          alignItems: 'center',
+                          gap: '10px',
+                          position: 'relative',
+                          marginBottom: !isLastItem ? '12px' : '0'
                         }}
                       >
                         {/* 左侧时间线容器 */}
@@ -177,8 +188,7 @@ export default function BotMessage({ message, actionSteps }: BotMessageProps) {
                           flexDirection: 'column', 
                           alignItems: 'center',
                           flexShrink: 0,
-                          position: 'relative',
-                          paddingTop: '4px'
+                          position: 'relative'
                         }}>
                           {/* 圆点 */}
                           <div style={{
@@ -197,9 +207,11 @@ export default function BotMessage({ message, actionSteps }: BotMessageProps) {
                           {!isLastItem && (
                             <div style={{
                               width: '2px',
-                              height: '10px',
+                              height: '16px',
                               backgroundColor: '#666',
                               opacity: 0.4,
+                              position: 'absolute',
+                              top: '100%',
                               marginTop: '4px'
                             }} />
                           )}
@@ -208,7 +220,7 @@ export default function BotMessage({ message, actionSteps }: BotMessageProps) {
                         {/* 步骤文本 */}
                         <div
                           style={{
-                            fontSize: '12px',
+                            fontSize: '14px',
                             color: 'transparent',
                             WebkitTextFillColor: 'transparent',
                             padding: 0,
@@ -417,8 +429,8 @@ export default function BotMessage({ message, actionSteps }: BotMessageProps) {
                       <div 
                         style={{
                           display: 'flex',
-                          alignItems: 'flex-start',
-                          gap: '8px',
+                          alignItems: 'center',
+                          gap: '10px',
                           position: 'relative'
                         }}
                       >
@@ -427,8 +439,7 @@ export default function BotMessage({ message, actionSteps }: BotMessageProps) {
                           flexDirection: 'column', 
                           alignItems: 'center',
                           flexShrink: 0,
-                          position: 'relative',
-                          paddingTop: '4px'
+                          position: 'relative'
                         }}>
                           <div style={{
                             width: '8px',
@@ -444,7 +455,7 @@ export default function BotMessage({ message, actionSteps }: BotMessageProps) {
                         </div>
                         <div
                           style={{
-                            fontSize: '12px',
+                            fontSize: '14px',
                             color: 'transparent',
                             WebkitTextFillColor: 'transparent',
                             padding: 0,
