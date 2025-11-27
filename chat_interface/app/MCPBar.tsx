@@ -286,7 +286,7 @@ function FeedbackButton() {
                 marginBottom: '12px',
                 fontWeight: 500
               }}>
-                How's your experience?
+                How&apos;s your experience?
               </div>
               <div style={{ 
                 display: 'flex', 

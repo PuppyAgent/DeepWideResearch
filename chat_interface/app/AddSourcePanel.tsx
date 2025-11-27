@@ -214,10 +214,10 @@ export default function AddSourcePanel({ open, onClose }: AddSourcePanelProps) {
           <div style={{ padding: '60px 32px', textAlign: 'center' }}>
             <div style={{ fontSize: '48px', marginBottom: '16px' }}>🎉</div>
             <div style={{ fontSize: '20px', fontWeight: 600, marginBottom: '8px', color: '#4ade80' }}>
-              You're on the list!
+              You&apos;re on the list!
             </div>
             <div style={{ fontSize: '14px', color: '#888' }}>
-              We'll reach out when enterprise sources are ready.
+              We&apos;ll reach out when enterprise sources are ready.
             </div>
             <button
               onClick={onClose}

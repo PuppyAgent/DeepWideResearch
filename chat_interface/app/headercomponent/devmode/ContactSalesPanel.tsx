@@ -157,7 +157,7 @@ export default function ContactSalesPanel({ open, onClose }: ContactSalesPanelPr
               Request Received!
             </div>
             <div style={{ fontSize: '14px', color: '#888', lineHeight: 1.5 }}>
-              We'll reach out to you soon.
+              We&apos;ll reach out to you soon.
             </div>
             <button
               onClick={onClose}
@@ -198,7 +198,7 @@ export default function ContactSalesPanel({ open, onClose }: ContactSalesPanelPr
                 </span>
               </div>
               <div style={{ fontSize: '13px', color: '#888' }}>
-                Tell us about your needs and we'll get back to you
+                Tell us about your needs and we&apos;ll get back to you
               </div>
             </div>
 
