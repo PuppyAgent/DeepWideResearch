@@ -57,6 +57,7 @@ export default function DeepWideModel({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+
   // Position the dropdown in a portal (avoid clipping by overflow/stacking contexts)
   useLayoutEffect(() => {
     if (!showModelMenu) return
@@ -463,6 +464,8 @@ export default function DeepWideModel({
           {Math.round(researchParams.wide * 100)}%
         </span>
       </div>
+    </div>
+
       <style jsx>{`
         @keyframes popScale {
           0% { transform: translateY(-50%) scale(0.92); opacity: 0; }
@@ -473,7 +476,6 @@ export default function DeepWideModel({
           100% { transform: translateY(-50%) scale(0.98); opacity: 0; }
         }
       `}</style>
-    </div>
     </div>
   )
 }
